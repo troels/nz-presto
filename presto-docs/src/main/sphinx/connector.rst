@@ -9,6 +9,7 @@ from different data sources.
     :maxdepth: 1
 
     connector/blackhole
+    connector/cassandra
     connector/hive
     connector/hive-security
     connector/memory

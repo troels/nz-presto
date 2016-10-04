@@ -9,7 +9,6 @@ from different data sources.
     :maxdepth: 1
 
     connector/accumulo
-    connector/cassandra
     connector/kafka
     connector/kafka-tutorial
     connector/localfile
