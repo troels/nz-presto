@@ -10,3 +10,4 @@ Administration
     admin/properties
     admin/queue
     admin/resource-groups
+    admin/query-performance-analysis
