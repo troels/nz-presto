@@ -26,6 +26,7 @@ Presto Documentation
     migration
     optimizer
     develop
+    versions
     release
 
 .. Note: If "release" is not the last item, the CSS must be updated.
