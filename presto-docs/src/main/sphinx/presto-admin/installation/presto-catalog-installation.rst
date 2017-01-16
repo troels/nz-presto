@@ -25,7 +25,7 @@ To add a catalog for the Hive connector:
 
 
 You may need to add additional properties for the Hive connector to work properly, such as if your Hadoop cluster
-is set up for high availability. For these and other properties, see the `Hive connector documentation <https://prestodb.io/docs/current/connector/hive.html>`_.
+is set up for high availability. For these and other properties, see the `Hive connector documentation <http://teradata.github.io/presto/docs/0.157.1-t/connector/hive.html>`_.
 
 For detailed documentation on ``catalog add``, see :ref:`catalog-add`.
-For more on which catalogs Presto supports, see the `Presto connector documentation <https://prestodb.io/docs/current/connector.html>`_.
+For more on which catalogs Teradata supports, see the `Presto connector documentation <http://teradata.github.io/presto/docs/0.157.1-t/connector.html>`_.
