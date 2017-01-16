@@ -18,5 +18,6 @@ from different data sources.
     connector/postgresql
     connector/sqlserver
     connector/system
+    connector/teradata
     connector/tpch
     connector/tpcds

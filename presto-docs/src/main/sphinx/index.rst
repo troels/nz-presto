@@ -16,6 +16,7 @@ Presto Documentation
     Presto Admin <presto-admin/user-guide>
     security
     admin
+    querygrid
     connector
     community_connector
     installation
