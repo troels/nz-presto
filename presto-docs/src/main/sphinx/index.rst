@@ -9,6 +9,7 @@ Presto Documentation
     overview
     system-requirements
     installation
+    sandbox-vms
     security
     admin
     connector
