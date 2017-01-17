@@ -8,12 +8,16 @@ Presto Documentation
 
     overview
     system-requirements
-    installation
+    getting-started
     sandbox-vms
+    server-installation-cluster-manual
+    server-installation-aws-emr-manual
+    client
     security
     admin
     connector
     community_connector
+    installation
     functions
     language
     sql
