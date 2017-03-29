@@ -10,4 +10,4 @@ distributed over one or more heterogeneous data sources.
 
     overview/teradata-distribution
     overview/use-cases
-    
+    overview/whats-new
