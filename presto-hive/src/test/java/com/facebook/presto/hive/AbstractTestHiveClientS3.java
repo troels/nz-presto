@@ -159,7 +159,7 @@ public abstract class AbstractTestHiveClientS3
         HiveConnectorId connectorId = new HiveConnectorId("hive-test");
         HiveCluster hiveCluster = new TestingHiveCluster(hiveClientConfig, host, port);
         ExecutorService executor = newCachedThreadPool(daemonThreadsNamed("hive-s3-%s"));
-        HdfsConfiguration hdfsConfiguration = new HiveHdfsConfiguration(new HdfsConfigurationUpdater(hiveClientConfig, s3Config));
+        HdfsConfiguration hdfsConfiguration = new HiveHdfsConfiguration(new HdfsConfigurationUpdater(hiveClientConfig, s3Config, new HiveWasbConfig()));
         HivePartitionManager hivePartitionManager = new HivePartitionManager(connectorId, TYPE_MANAGER, hiveClientConfig);
 
         hdfsEnvironment = new HdfsEnvironment(hdfsConfiguration, hiveClientConfig, new NoHdfsAuthentication());

@@ -513,7 +513,7 @@ public abstract class AbstractTestHiveClient
         setupHive(connectorId.toString(), databaseName, hiveClientConfig.getTimeZone());
 
         metastoreClient = hiveMetastore;
-        HdfsConfiguration hdfsConfiguration = new HiveHdfsConfiguration(new HdfsConfigurationUpdater(hiveClientConfig, new HiveS3Config()));
+        HdfsConfiguration hdfsConfiguration = new HiveHdfsConfiguration(new HdfsConfigurationUpdater(hiveClientConfig, new HiveS3Config(), new HiveWasbConfig()));
         hdfsEnvironment = new HdfsEnvironment(hdfsConfiguration, hiveClientConfig, new NoHdfsAuthentication());
         locationService = new HiveLocationService(hdfsEnvironment);
         JsonCodec<PartitionUpdate> partitionUpdateCodec = JsonCodec.jsonCodec(PartitionUpdate.class);
