@@ -29,8 +29,8 @@ import javax.ws.rs.WebApplicationException;
 import java.util.Locale;
 import java.util.Optional;
 
-import static com.facebook.presto.SystemSessionProperties.DISTRIBUTED_JOIN;
 import static com.facebook.presto.SystemSessionProperties.HASH_PARTITION_COUNT;
+import static com.facebook.presto.SystemSessionProperties.JOIN_DISTRIBUTION_TYPE;
 import static com.facebook.presto.SystemSessionProperties.QUERY_MAX_MEMORY;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_CATALOG;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_CLIENT_INFO;
@@ -63,7 +63,7 @@ public class TestHttpRequestSessionFactory
                         .put(PRESTO_TIME_ZONE, "Asia/Taipei")
                         .put(PRESTO_CLIENT_INFO, "client-info")
                         .put(PRESTO_SESSION, QUERY_MAX_MEMORY + "=1GB")
-                        .put(PRESTO_SESSION, DISTRIBUTED_JOIN + "=true," + HASH_PARTITION_COUNT + " = 43")
+                        .put(PRESTO_SESSION, JOIN_DISTRIBUTION_TYPE + "=repartitioned," + HASH_PARTITION_COUNT + " = 43")
                         .put(PRESTO_PREPARED_STATEMENT, "query1=select * from foo,query2=select * from bar")
                         .put(PRESTO_ROLE, "foo_connector=ALL")
                         .put(PRESTO_ROLE, "bar_connector=NONE")
@@ -89,7 +89,7 @@ public class TestHttpRequestSessionFactory
         assertEquals(session.getClientInfo().get(), "client-info");
         assertEquals(session.getSystemProperties(), ImmutableMap.<String, String>builder()
                 .put(QUERY_MAX_MEMORY, "1GB")
-                .put(DISTRIBUTED_JOIN, "true")
+                .put(JOIN_DISTRIBUTION_TYPE, "repartitioned")
                 .put(HASH_PARTITION_COUNT, "43")
                 .build());
         assertEquals(session.getPreparedStatements(), ImmutableMap.<String, String>builder()
@@ -153,7 +153,7 @@ public class TestHttpRequestSessionFactory
                         .put(PRESTO_TIME_ZONE, "Asia/Taipei")
                         .put(PRESTO_CLIENT_INFO, "client-info")
                         .put(PRESTO_SESSION, QUERY_MAX_MEMORY + "=1GB")
-                        .put(PRESTO_SESSION, DISTRIBUTED_JOIN + "=true," + HASH_PARTITION_COUNT + " = 43")
+                        .put(PRESTO_SESSION, JOIN_DISTRIBUTION_TYPE + "=AUTOMATIC," + HASH_PARTITION_COUNT + " = 43")
                         .put(PRESTO_PREPARED_STATEMENT, "query1=select * from foo,query2=select * from bar")
                         .put(PRESTO_PREPARED_STATEMENT_IN_BODY, "true")
                         .build(),

@@ -21,6 +21,8 @@ import org.testng.annotations.Test;
 
 import java.util.Map;
 
+import static com.facebook.presto.sql.analyzer.FeaturesConfig.JoinDistributionType.REPARTITIONED;
+import static com.facebook.presto.sql.analyzer.FeaturesConfig.JoinDistributionType.REPLICATED;
 import static com.facebook.presto.sql.analyzer.RegexLibrary.JONI;
 import static com.facebook.presto.sql.analyzer.RegexLibrary.RE2J;
 import static io.airlift.configuration.testing.ConfigAssertions.assertDeprecatedEquivalence;
@@ -40,7 +42,7 @@ public class TestFeaturesConfig
                 .setNetworkCostWeight(0.25)
                 .setResourceGroupsEnabled(false)
                 .setDistributedIndexJoinsEnabled(false)
-                .setDistributedJoinsEnabled(true)
+                .setJoinDistributionType(REPARTITIONED)
                 .setFastInequalityJoins(true)
                 .setColocatedJoinsEnabled(false)
                 .setJoinReorderingEnabled(true)
@@ -90,7 +92,7 @@ public class TestFeaturesConfig
                 .put("deprecated.legacy-order-by", "true")
                 .put("deprecated.legacy-map-subscript", "true")
                 .put("distributed-index-joins-enabled", "true")
-                .put("distributed-joins-enabled", "false")
+                .put("join-distribution-type", "REPLICATED")
                 .put("fast-inequality-joins", "false")
                 .put("colocated-joins-enabled", "true")
                 .put("reorder-joins", "false")
@@ -131,7 +133,7 @@ public class TestFeaturesConfig
                 .put("deprecated.legacy-order-by", "true")
                 .put("deprecated.legacy-map-subscript", "true")
                 .put("distributed-index-joins-enabled", "true")
-                .put("distributed-joins-enabled", "false")
+                .put("join-distribution-type", "REPLICATED")
                 .put("fast-inequality-joins", "false")
                 .put("colocated-joins-enabled", "true")
                 .put("reorder-joins", "false")
@@ -170,7 +172,7 @@ public class TestFeaturesConfig
                 .setIterativeOptimizerEnabled(false)
                 .setIterativeOptimizerTimeout(new Duration(10, SECONDS))
                 .setDistributedIndexJoinsEnabled(true)
-                .setDistributedJoinsEnabled(false)
+                .setJoinDistributionType(REPLICATED)
                 .setFastInequalityJoins(false)
                 .setColocatedJoinsEnabled(true)
                 .setJoinReorderingEnabled(false)
