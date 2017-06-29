@@ -101,7 +101,8 @@ public class TestQuerySpillLimits
                         .setSpillEnabled(true),
                 nodeSpillConfig,
                 false,
-                true);
+                true,
+                1);
 
         queryRunner.createCatalog(
                 SESSION.getCatalog().get(),
