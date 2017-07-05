@@ -323,7 +323,7 @@ public class PlanOptimizers
                         stats,
                         statsCalculator,
                         estimatedExchangesCostCalculator,
-                        ImmutableSet.of(new ReorderJoins(costComparator))
+                        ImmutableSet.of(new ReorderJoins(costComparator, statsCalculator, costCalculator))
                 ));
 
         if (featuresConfig.isOptimizeSingleDistinct()) {
