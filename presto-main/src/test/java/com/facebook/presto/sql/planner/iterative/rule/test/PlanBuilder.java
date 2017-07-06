@@ -39,6 +39,7 @@ import com.facebook.presto.sql.planner.plan.Assignments;
 import com.facebook.presto.sql.planner.plan.DeleteNode;
 import com.facebook.presto.sql.planner.plan.ExchangeNode;
 import com.facebook.presto.sql.planner.plan.FilterNode;
+import com.facebook.presto.sql.planner.plan.IntersectNode;
 import com.facebook.presto.sql.planner.plan.JoinNode;
 import com.facebook.presto.sql.planner.plan.LateralJoinNode;
 import com.facebook.presto.sql.planner.plan.LimitNode;
@@ -420,6 +421,11 @@ public class PlanBuilder
     {
         ImmutableList<Symbol> outputs = outputsToInputs.keySet().stream().collect(toImmutableList());
         return new UnionNode(idAllocator.getNextId(), sources, outputsToInputs, outputs);
+    }
+
+    public IntersectNode intersect(List<? extends PlanNode> sources, ListMultimap<Symbol, Symbol> outputsToInputs, List<Symbol> outputs)
+    {
+        return new IntersectNode(idAllocator.getNextId(), (List<PlanNode>) sources, outputsToInputs, outputs);
     }
 
     public TableWriterNode tableWriter(PlanNode source, List<Symbol> columns, List<String> columnNames)
