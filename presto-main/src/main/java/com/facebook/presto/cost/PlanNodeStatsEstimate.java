@@ -57,6 +57,9 @@ public class PlanNodeStatsEstimate
      */
     public double getOutputSizeInBytes()
     {
+        if (isNaN(outputRowCount)) {
+            return Double.NaN;
+        }
         double outputSizeInBytes = 0;
         for (Map.Entry<Symbol, SymbolStatsEstimate> entry : symbolStatistics.entrySet()) {
             outputSizeInBytes += getOutputSizeForSymbol(entry.getValue());
