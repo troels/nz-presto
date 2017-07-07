@@ -83,7 +83,7 @@ public class TestReorderJoins
         tester = null;
     }
 
-    @Test(enabled = false)
+    @Test
     public void testKeepsOutputSymbols()
     {
         StatsCalculator testingStatsCalculator = new TestingStatsCalculator(statsCalculator, ImmutableMap.of(
@@ -118,7 +118,7 @@ public class TestReorderJoins
                 ));
     }
 
-    @Test(enabled = false)
+    @Test
     public void testReplicatesAndFlipsWhenOneTableMuchSmaller()
     {
         StatsCalculator testingStatsCalculator = new TestingStatsCalculator(statsCalculator, ImmutableMap.of(
@@ -151,7 +151,7 @@ public class TestReorderJoins
                 ));
     }
 
-    @Test(enabled = false)
+    @Test
     public void testRepartitionsWhenRequiredBySession()
     {
         StatsCalculator testingStatsCalculator = new TestingStatsCalculator(statsCalculator, ImmutableMap.of(
@@ -185,7 +185,7 @@ public class TestReorderJoins
                 ));
     }
 
-    @Test(enabled = false)
+    @Test
     public void testRepartitionsWhenBothTablesEqual()
     {
         StatsCalculator testingStatsCalculator = new TestingStatsCalculator(statsCalculator, ImmutableMap.of(
@@ -218,7 +218,7 @@ public class TestReorderJoins
                 ));
     }
 
-    @Test(enabled = false)
+    @Test
     public void testReplicatesWhenRequiredBySession()
     {
         StatsCalculator testingStatsCalculator = new TestingStatsCalculator(statsCalculator, ImmutableMap.of(
@@ -310,7 +310,7 @@ public class TestReorderJoins
                 .doesNotFire();
     }
 
-    @Test(enabled = false)
+    @Test
     public void testPredicatesPushedDown()
     {
         StatsCalculator testingStatsCalculator = new TestingStatsCalculator(statsCalculator, ImmutableMap.of(
