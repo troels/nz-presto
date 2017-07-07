@@ -48,9 +48,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
-import static com.facebook.presto.cost.PlanNodeCostEstimate.UNKNOWN_COST;
 import static com.facebook.presto.cost.PlanNodeCostEstimate.cpuCost;
-import static com.facebook.presto.cost.PlanNodeStatsEstimate.UNKNOWN_STATS;
 import static com.facebook.presto.metadata.FunctionKind.AGGREGATE;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.TypeSignature.parseTypeSignature;
@@ -90,8 +88,6 @@ public class TestCostCalculator
                 .cpu(1000)
                 .memoryUnknown()
                 .networkUnknown();
-
-        assertUnknownCostForUnknownStats(tableScan);
     }
 
     @Test
@@ -116,8 +112,6 @@ public class TestCostCalculator
                 .cpu(1000 + 4000)
                 .memoryUnknown()
                 .networkUnknown();
-
-        assertUnknownCostForUnknownStats(project);
     }
 
     @Test
@@ -154,8 +148,6 @@ public class TestCostCalculator
                 .cpu(12000 + 6000 + 1000 + 6000 + 1000 + 6000 + 1000)
                 .memoryUnknown()
                 .networkUnknown();
-
-        assertUnknownCostForUnknownStats(join);
     }
 
     @Test
@@ -192,8 +184,6 @@ public class TestCostCalculator
                 .cpu(12000 + 6000 + 10000 + 6000 + 1000)
                 .memoryUnknown()
                 .networkUnknown();
-
-        assertUnknownCostForUnknownStats(join);
     }
 
     @Test
@@ -212,12 +202,11 @@ public class TestCostCalculator
                 .memoryUnknown()
                 .networkUnknown();
 
+
         assertCostEstimatedExchanges(aggregationNode, costs, stats)
                 .cpu(6000 + 6000 + 6000)
                 .memoryUnknown()
                 .networkUnknown();
-
-        assertUnknownCostForUnknownStats(aggregationNode);
     }
 
     private CostAssertionBuilder assertCost(
@@ -242,26 +231,6 @@ public class TestCostCalculator
                 new FixedLookup(costs, stats),
                 session,
                 ImmutableMap.of()));
-    }
-
-    private void assertUnknownCostForUnknownStats(PlanNode planNode)
-    {
-        new CostAssertionBuilder(costCalculatorUsingExchanges.calculateCumulativeCost(
-                planNode,
-                new FixedLookup(id -> UNKNOWN_COST, id -> UNKNOWN_STATS),
-                session,
-                ImmutableMap.of()))
-                .cpuUnknown()
-                .memoryUnknown()
-                .networkUnknown();
-        new CostAssertionBuilder(costCalculatorWithEstimatedExchanges.calculateCumulativeCost(
-                planNode,
-                new FixedLookup(id -> UNKNOWN_COST, id -> UNKNOWN_STATS),
-                session,
-                ImmutableMap.of()))
-                .cpuUnknown()
-                .memoryUnknown()
-                .networkUnknown();
     }
 
     private static class CostAssertionBuilder
