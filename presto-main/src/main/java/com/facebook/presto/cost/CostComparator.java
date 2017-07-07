@@ -57,7 +57,7 @@ public class CostComparator
         requireNonNull(session, "session can not be null");
         requireNonNull(left, "left can not be null");
         requireNonNull(right, "right can not be null");
-        checkArgument(!left.hasUnknownComponents() && !right.hasUnknownComponents(), "cannot compare unknown costs");
+        checkArgument(!left.isUnknown() && !right.isUnknown(), "cannot compare unknown costs");
         double leftCost = left.getCpuCost() * cpuWeight
                 + left.getMemoryCost() * memoryWeight
                 + left.getNetworkCost() * networkWeight;
