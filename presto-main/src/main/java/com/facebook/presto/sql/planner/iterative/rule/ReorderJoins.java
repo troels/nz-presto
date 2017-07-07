@@ -117,7 +117,7 @@ public class ReorderJoins
 
         Lookup joinCachingStatsLookup = Lookup.from(lookup::resolve, new JoinNodeCachingStatsCalculator(new CachingStatsCalculator(statsCalculator)), new CachingCostCalculator(costCalculator));
         JoinEnumerationResult result = new JoinEnumerator(idAllocator, symbolAllocator, session, joinCachingStatsLookup, multiJoinNode.getFilter(), costComparator).chooseJoinOrder(multiJoinNode.getSources(), multiJoinNode.getOutputSymbols());
-        return result.getCost().hasUnknownComponents() || result.getCost().equals(INFINITE_COST) ? Optional.empty() : result.getPlanNode();
+        return result.getCost().isUnknown() || result.getCost().equals(INFINITE_COST) ? Optional.empty() : result.getPlanNode();
     }
 
     @VisibleForTesting
@@ -172,7 +172,7 @@ public class ReorderJoins
                 Set<Set<Integer>> partitions = generatePartitions(sources.size()).collect(toImmutableSet());
                 for (Set<Integer> partition : partitions) {
                     JoinEnumerationResult result = createJoinAccordingToPartitioning(sources, outputSymbols, partition);
-                    if (result.cost.hasUnknownComponents()) {
+                    if (result.cost.isUnknown()) {
                         memo.put(multiJoinKey, result);
                         return result;
                     }
@@ -273,7 +273,7 @@ public class ReorderJoins
                     idAllocator,
                     ImmutableList.copyOf(leftSources),
                     requiredJoinSymbols.stream().filter(leftSymbols::contains).collect(toImmutableList()));
-            if (leftResult.cost.hasUnknownComponents()) {
+            if (leftResult.cost.isUnknown()) {
                 return UNKNOWN_COST_RESULT;
             }
             if (leftResult.cost.equals(INFINITE_COST)) {
@@ -286,7 +286,7 @@ public class ReorderJoins
                     requiredJoinSymbols.stream()
                             .filter(rightSymbols::contains)
                             .collect(toImmutableList()));
-            if (rightResult.cost.hasUnknownComponents()) {
+            if (rightResult.cost.isUnknown()) {
                 return UNKNOWN_COST_RESULT;
             }
             if (rightResult.cost.equals(INFINITE_COST)) {
@@ -380,7 +380,7 @@ public class ReorderJoins
                 node = node.flipChildren();
                 possibleJoinNodes.add(new JoinEnumerationResult(lookup.getCumulativeCost(node, session, symbolAllocator.getTypes()), Optional.of(node)));
             }
-            if (possibleJoinNodes.stream().anyMatch(result -> result.cost.hasUnknownComponents())) {
+            if (possibleJoinNodes.stream().anyMatch(result -> result.cost.isUnknown())) {
                 return UNKNOWN_COST_RESULT;
             }
             return resultOrdering.min(possibleJoinNodes);
@@ -400,7 +400,7 @@ public class ReorderJoins
         {
             this.cost = requireNonNull(cost);
             this.planNode = requireNonNull(planNode);
-            checkArgument(cost.hasUnknownComponents() || cost.equals(INFINITE_COST) || planNode.isPresent(), "planNode must be present if cost is known");
+            checkArgument(cost.isUnknown() || cost.equals(INFINITE_COST) || planNode.isPresent(), "planNode must be present if cost is known");
         }
 
         public Optional<PlanNode> getPlanNode()
