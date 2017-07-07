@@ -124,7 +124,7 @@ public class PlanNodeCostEstimate
 
     public static PlanNodeCostEstimate memoryCost(double memoryCost)
     {
-        return builder().setMemoryCost(memoryCost).build();
+        return builder().setCpuCost(memoryCost).build();
     }
 
     public static Builder builder()
