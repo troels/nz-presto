@@ -46,7 +46,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
 
 import static com.facebook.presto.cost.PlanNodeCostEstimate.cpuCost;
 import static com.facebook.presto.metadata.FunctionKind.AGGREGATE;
@@ -56,6 +55,7 @@ import static com.facebook.presto.testing.TestingSession.testSessionBuilder;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.toMap;
 import static org.testng.Assert.assertEquals;
 
 @Test(singleThreaded = true)
@@ -366,18 +366,17 @@ public class TestCostCalculator
     private class FixedLookup
             implements Lookup
     {
-        private Function<String, PlanNodeCostEstimate> costs;
-        private Function<String, PlanNodeStatsEstimate> stats;
-
-        public FixedLookup(Function<String, PlanNodeCostEstimate> costs, Function<String, PlanNodeStatsEstimate> stats)
-        {
-            this.costs = costs;
-            this.stats = stats;
-        }
+        private Map<PlanNodeId, PlanNodeCostEstimate> costs;
+        private Map<PlanNodeId, PlanNodeStatsEstimate> stats;
 
         public FixedLookup(Map<String, PlanNodeCostEstimate> costs, Map<String, PlanNodeStatsEstimate> stats)
         {
-            this(costs::get, stats::get);
+            this.costs = costs.entrySet()
+                    .stream()
+                    .collect(toMap(entry -> new PlanNodeId(entry.getKey()), Map.Entry::getValue));
+            this.stats = stats.entrySet()
+                    .stream()
+                    .collect(toMap(entry -> new PlanNodeId(entry.getKey()), Map.Entry::getValue));
         }
 
         @Override
@@ -389,13 +388,13 @@ public class TestCostCalculator
         @Override
         public PlanNodeStatsEstimate getStats(PlanNode node, Session session, Map<Symbol, Type> types)
         {
-            return stats.apply(node.getId().toString());
+            return stats.get(node.getId());
         }
 
         @Override
         public PlanNodeCostEstimate getCumulativeCost(PlanNode node, Session session, Map<Symbol, Type> types)
         {
-            return costs.apply(node.getId().toString());
+            return costs.get(node.getId());
         }
     }
 }
