@@ -24,8 +24,8 @@ import static java.lang.Double.isNaN;
 public class PlanNodeCostEstimate
 {
     public static final PlanNodeCostEstimate INFINITE_COST = new PlanNodeCostEstimate(POSITIVE_INFINITY, POSITIVE_INFINITY, POSITIVE_INFINITY);
-    public static final PlanNodeCostEstimate UNKNOWN_COST = PlanNodeCostEstimate.builder().build();
-    public static final PlanNodeCostEstimate ZERO_COST = new PlanNodeCostEstimate(0, 0, 0);
+    public static final PlanNodeCostEstimate UNKNOWN_COST = new PlanNodeCostEstimate(NaN, NaN, NaN);
+    public static final PlanNodeCostEstimate ZERO_COST = PlanNodeCostEstimate.builder().build();
 
     private final double cpuCost;
     private final double memoryCost;
@@ -134,9 +134,9 @@ public class PlanNodeCostEstimate
 
     public static final class Builder
     {
-        private double cpuCost = NaN;
-        private double memoryCost = NaN;
-        private double networkCost = NaN;
+        private double cpuCost = 0;
+        private double memoryCost = 0;
+        private double networkCost = 0;
 
         public Builder setFrom(PlanNodeCostEstimate otherStatistics)
         {
