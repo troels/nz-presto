@@ -66,9 +66,9 @@ public class PlanNodeCostEstimate
     }
 
     /**
-     * Returns true if this cost has unknown components.
+     * Returns true if cost is unknowny. That is any of the components of cost is unknown.
      */
-    public boolean hasUnknownComponents()
+    public boolean isUnknown()
     {
         return isNaN(cpuCost) || isNaN(memoryCost) || isNaN(networkCost);
     }
