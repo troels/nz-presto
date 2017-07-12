@@ -46,12 +46,8 @@ public class CapDistinctValuesCountToTypeDomainRangeLength
             estimate = estimate.mapSymbolColumnStatistics(
                     symbol,
                     symbolStatsEstimate -> symbolStatsEstimate.mapDistinctValuesCount(
-                            distinctValuesCount -> {
-                                if (!isNaN(distinctValuesCount)) {
-                                    return min(distinctValuesCount, domainLength);
-                                }
-                                return distinctValuesCount;
-                            }));
+                            distinctValuesCount -> min(distinctValuesCount, domainLength)
+                    ));
         }
 
         return estimate;
