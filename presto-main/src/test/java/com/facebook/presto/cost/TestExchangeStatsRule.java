@@ -118,7 +118,7 @@ public class TestExchangeStatsRule
                         .symbolStats("o2", assertion -> assertion
                                 .lowValue(0)
                                 .highValue(7)
-                                .distinctValuesCount(7)
+                                .distinctValuesCountUnknown()
                                 .nullsFractionUnknown())
                         .symbolStats("o3", assertion -> assertion
                                 .lowValueUnknown()
