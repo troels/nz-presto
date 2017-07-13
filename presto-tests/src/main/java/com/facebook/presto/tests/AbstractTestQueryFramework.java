@@ -302,7 +302,7 @@ public abstract class AbstractTestQueryFramework
         Metadata metadata = queryRunner.getMetadata();
         FeaturesConfig featuresConfig = new FeaturesConfig().setOptimizeHashGeneration(true);
         boolean forceSingleNode = queryRunner.getNodeCount() == 1;
-        CostCalculator costCalculator = new CostCalculatorUsingExchanges(queryRunner.getNodeCount());
+        CostCalculator costCalculator = new CostCalculatorUsingExchanges(queryRunner::getNodeCount);
         List<PlanOptimizer> optimizers = new PlanOptimizers(
                 metadata,
                 sqlParser,
@@ -314,7 +314,7 @@ public abstract class AbstractTestQueryFramework
                         new CoefficientBasedStatsCalculator(metadata),
                         ServerMainModule.createNewStatsCalculator(metadata, new FilterStatsCalculator(metadata), new ScalarStatsCalculator(metadata))),
                 costCalculator,
-                new CostCalculatorWithEstimatedExchanges(costCalculator, queryRunner.getNodeCount())).get();
+                new CostCalculatorWithEstimatedExchanges(costCalculator, queryRunner::getNodeCount)).get();
         return new QueryExplainer(
                 optimizers,
                 metadata,

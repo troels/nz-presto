@@ -141,7 +141,7 @@ public final class TaskTestUtils
                 new SelectingStatsCalculator(
                         new CoefficientBasedStatsCalculator(metadata),
                         ServerMainModule.createNewStatsCalculator(metadata, new FilterStatsCalculator(metadata), new ScalarStatsCalculator(metadata))),
-                new CostCalculatorUsingExchanges(1),
+                new CostCalculatorUsingExchanges(() -> 1),
                 Optional.empty(),
                 pageSourceManager,
                 new IndexManager(),

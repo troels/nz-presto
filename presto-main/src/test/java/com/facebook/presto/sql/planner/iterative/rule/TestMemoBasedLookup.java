@@ -59,7 +59,7 @@ public class TestMemoBasedLookup
         PlanNode plan = node(source);
         Memo memo = new Memo(idAllocator, plan);
 
-        Lookup lookup = Lookup.from(memo::resolve, new NodeCountingStatsCalculator(), new CostCalculatorUsingExchanges(1));
+        Lookup lookup = Lookup.from(memo::resolve, new NodeCountingStatsCalculator(), new CostCalculatorUsingExchanges(() -> 1));
         PlanNode memoSource = Iterables.getOnlyElement(memo.getNode(memo.getRootGroup()).getSources());
         checkState(memoSource instanceof GroupReference, "expected GroupReference");
         assertEquals(lookup.resolve(memoSource), source);
@@ -70,7 +70,7 @@ public class TestMemoBasedLookup
     {
         PlanNode plan = node(node(node()));
         Memo memo = new Memo(idAllocator, plan);
-        Lookup lookup = Lookup.from(memo::resolve, new NodeCountingStatsCalculator(), new CostCalculatorUsingExchanges(1));
+        Lookup lookup = Lookup.from(memo::resolve, new NodeCountingStatsCalculator(), new CostCalculatorUsingExchanges(() -> 1));
 
         PlanNodeStatsEstimate actualStats = lookup.getStats(memo.getNode(memo.getRootGroup()), queryRunner.getDefaultSession(), ImmutableMap.of());
         PlanNodeStatsEstimate expectedStats = PlanNodeStatsEstimate.builder().setOutputRowCount(3).build();
