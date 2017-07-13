@@ -44,9 +44,9 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 })
 public class FeaturesConfig
 {
-    private double cpuCostWeight = 0.75;
-    private double memoryCostWeight = 0.1;
-    private double networkCostWeight = 0.25;
+    private double cpuCostWeight = 75;
+    private double memoryCostWeight = 10;
+    private double networkCostWeight = 15;
 
     private boolean distributedIndexJoinsEnabled;
     private boolean colocatedJoinsEnabled;
