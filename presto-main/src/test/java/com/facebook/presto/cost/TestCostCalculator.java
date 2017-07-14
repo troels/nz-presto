@@ -79,16 +79,16 @@ public class TestCostCalculator
                 tableScan,
                 ImmutableMap.of(),
                 ImmutableMap.of("ts", statsEstimate(1000)))
-                .cpu(1000)
+                .cpu(10000)
                 .memory(0)
-                .network(0);
+                .network(1000);
         assertCostEstimatedExchanges(
                 tableScan,
                 ImmutableMap.of(),
                 ImmutableMap.of("ts", statsEstimate(1000)))
-                .cpu(1000)
+                .cpu(10000)
                 .memory(0)
-                .network(0);
+                .network(1000);
 
         assertCostHasUnknownComponentsForUnknownStats(tableScan);
     }
