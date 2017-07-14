@@ -19,6 +19,7 @@ import com.facebook.presto.cost.PlanNodeCostEstimate;
 import com.facebook.presto.cost.PlanNodeStatsEstimate;
 import com.facebook.presto.execution.StageInfo;
 import com.facebook.presto.execution.StageStats;
+import com.facebook.presto.metadata.FunctionRegistry;
 import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.metadata.OperatorNotFoundException;
 import com.facebook.presto.metadata.Signature;
@@ -262,7 +263,7 @@ public class PlanPrinter
                 .map(argument -> {
                     if (argument.isConstant()) {
                         NullableValue constant = argument.getConstant();
-                        String printableValue = castToVarchar(constant.getType(), constant.getValue(), metadata, session);
+                        String printableValue = castToVarchar(constant.getType(), constant.getValue(), metadata.getFunctionRegistry(), session);
                         return constant.getType().getDisplayName() + "(" + printableValue + ")";
                     }
                     return argument.getColumn().toString();
@@ -1263,7 +1264,7 @@ public class PlanPrinter
                         for (Range range : ranges.getOrderedRanges()) {
                             StringBuilder builder = new StringBuilder();
                             if (range.isSingleValue()) {
-                                String value = castToVarchar(type, range.getSingleValue(), PlanPrinter.this.metadata, session);
+                                String value = castToVarchar(type, range.getSingleValue(), PlanPrinter.this.metadata.getFunctionRegistry(), session);
                                 builder.append('[').append(value).append(']');
                             }
                             else {
@@ -1273,7 +1274,7 @@ public class PlanPrinter
                                     builder.append("<min>");
                                 }
                                 else {
-                                    builder.append(castToVarchar(type, range.getLow().getValue(), PlanPrinter.this.metadata, session));
+                                    builder.append(castToVarchar(type, range.getLow().getValue(), PlanPrinter.this.metadata.getFunctionRegistry(), session));
                                 }
 
                                 builder.append(", ");
@@ -1282,7 +1283,7 @@ public class PlanPrinter
                                     builder.append("<max>");
                                 }
                                 else {
-                                    builder.append(castToVarchar(type, range.getHigh().getValue(), PlanPrinter.this.metadata, session));
+                                    builder.append(castToVarchar(type, range.getHigh().getValue(), PlanPrinter.this.metadata.getFunctionRegistry(), session));
                                 }
 
                                 builder.append((range.getHigh().getBound() == Marker.Bound.EXACTLY) ? ']' : ')');
@@ -1291,7 +1292,7 @@ public class PlanPrinter
                         }
                     },
                     discreteValues -> discreteValues.getValues().stream()
-                            .map(value -> castToVarchar(type, value, PlanPrinter.this.metadata, session))
+                            .map(value -> castToVarchar(type, value, PlanPrinter.this.metadata.getFunctionRegistry(), session))
                             .sorted() // Sort so the values will be printed in predictable order
                             .forEach(parts::add),
                     allOrNone -> {
@@ -1375,16 +1376,16 @@ public class PlanPrinter
         return builder.toString();
     }
 
-    private static String castToVarchar(Type type, Object value, Metadata metadata, Session session)
+    private static String castToVarchar(Type type, Object value, FunctionRegistry functionRegistry, Session session)
     {
         if (value == null) {
             return "NULL";
         }
 
-        Signature coercion = metadata.getFunctionRegistry().getCoercion(type, VARCHAR);
+        Signature coercion = functionRegistry.getCoercion(type, VARCHAR);
 
         try {
-            Slice coerced = (Slice) new FunctionInvoker(metadata.getFunctionRegistry()).invoke(coercion, session.toConnectorSession(), value);
+            Slice coerced = (Slice) new FunctionInvoker(functionRegistry).invoke(coercion, session.toConnectorSession(), value);
             return coerced.toStringUtf8();
         }
         catch (OperatorNotFoundException e) {
