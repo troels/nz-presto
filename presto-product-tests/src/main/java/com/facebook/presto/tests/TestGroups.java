@@ -20,6 +20,7 @@ public final class TestGroups
     public static final String ALTER_TABLE = "alter_table";
     public static final String SIMPLE = "simple";
     public static final String QUARANTINE = "quarantine";
+    public static final String QUARANTINE_ON_EMR = "quarantine_on_emr";
     public static final String FUNCTIONS = "functions";
     public static final String CLI = "cli";
     public static final String HIVE_CONNECTOR = "hive_connector";

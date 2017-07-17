@@ -20,6 +20,7 @@ import com.teradata.tempto.query.QueryResult;
 import org.testng.annotations.Test;
 
 import static com.facebook.presto.tests.TestGroups.HIVE_CONNECTOR;
+import static com.facebook.presto.tests.TestGroups.QUARANTINE_ON_EMR;
 import static com.facebook.presto.tests.TestGroups.SMOKE;
 import static com.facebook.presto.tests.hive.HiveTableDefinitions.NATION_PARTITIONED_BY_REGIONKEY;
 import static com.facebook.presto.tests.hive.HiveTableDefinitions.NATION_PARTITIONED_BY_REGIONKEY_NUMBER_OF_LINES_PER_SPLIT;
@@ -46,7 +47,7 @@ public class TestTablePartitioningInsertInto
                 mutableTable(NATION, TARGET_NATION_NAME, CREATED));
     }
 
-    @Test(groups = {HIVE_CONNECTOR, SMOKE})
+    @Test(groups = {HIVE_CONNECTOR, SMOKE, QUARANTINE_ON_EMR})
     public void selectFromPartitionedNation()
             throws Exception
     {
