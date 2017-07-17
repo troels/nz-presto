@@ -16,7 +16,6 @@ package com.facebook.presto.cost;
 
 import com.facebook.presto.metadata.FunctionRegistry;
 import com.facebook.presto.metadata.Signature;
-import com.facebook.presto.operator.scalar.ScalarFunctionImplementation;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.type.BigintType;
 import com.facebook.presto.spi.type.BooleanType;
@@ -29,7 +28,7 @@ import com.facebook.presto.spi.type.SmallintType;
 import com.facebook.presto.spi.type.TinyintType;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.spi.type.VarcharType;
-import com.facebook.presto.sql.planner.ExpressionInterpreter;
+import com.facebook.presto.sql.FunctionInvoker;
 import io.airlift.slice.Slice;
 
 import java.util.OptionalDouble;
@@ -46,27 +45,27 @@ public class DomainConverter
     private final Type type;
     private final FunctionRegistry functionRegistry;
     private final ConnectorSession session;
+    private final FunctionInvoker functionInvoker;
 
     public DomainConverter(Type type, FunctionRegistry functionRegistry, ConnectorSession session)
     {
         this.type = type;
         this.functionRegistry = functionRegistry;
         this.session = session;
+        this.functionInvoker = new FunctionInvoker(functionRegistry);
     }
 
     public Slice castToVarchar(Object object)
     {
         Signature castSignature = functionRegistry.getCoercion(type, VarcharType.createUnboundedVarcharType());
-        ScalarFunctionImplementation castImplementation = functionRegistry.getScalarFunctionImplementation(castSignature);
-        return (Slice) ExpressionInterpreter.invoke(session, castImplementation, singletonList(object));
+        return (Slice) functionInvoker.invoke(castSignature, session, singletonList(object));
     }
 
     public OptionalDouble translateToDouble(Object object)
     {
         if (convertibleToDoubleWithCast(type)) {
             Signature castSignature = functionRegistry.getCoercion(type, DoubleType.DOUBLE);
-            ScalarFunctionImplementation castImplementation = functionRegistry.getScalarFunctionImplementation(castSignature);
-            return OptionalDouble.of((double) ExpressionInterpreter.invoke(session, castImplementation, singletonList(object)));
+            return OptionalDouble.of((double) functionInvoker.invoke(castSignature, session, singletonList(object)));
         }
 
         if (DateType.DATE.equals(type)) {
