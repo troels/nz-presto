@@ -12,3 +12,5 @@ with the ``beta.spill-enabled`` configuration flag.
 **Fix execution of several window functions on array and map types**
 
 Some window functions taking array or map types (e.g. approx_percentile) were not executing before that patch.
+
+**Fix explain plan for tables partitioned on timestamp column**
