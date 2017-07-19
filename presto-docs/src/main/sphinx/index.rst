@@ -25,6 +25,7 @@ Presto Documentation
     sql
     migration
     optimizer
+    spill
     develop
     versions
     release
