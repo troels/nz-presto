@@ -46,6 +46,7 @@ import com.facebook.presto.sql.planner.iterative.rule.PushDownTableConstraints;
 import com.facebook.presto.sql.planner.iterative.rule.PushLimitThroughMarkDistinct;
 import com.facebook.presto.sql.planner.iterative.rule.PushLimitThroughProject;
 import com.facebook.presto.sql.planner.iterative.rule.PushLimitThroughSemiJoin;
+import com.facebook.presto.sql.planner.iterative.rule.PushPartialAggregationThroughExchange;
 import com.facebook.presto.sql.planner.iterative.rule.PushPartialAggregationThroughJoin;
 import com.facebook.presto.sql.planner.iterative.rule.PushProjectionThroughExchange;
 import com.facebook.presto.sql.planner.iterative.rule.PushProjectionThroughUnion;
@@ -410,8 +411,7 @@ public class PlanOptimizers
         builder.add(new IterativeOptimizer(
                 stats,
                 ImmutableList.of(new PartialAggregationPushDown(metadata.getFunctionRegistry())),
-                ImmutableSet.of(new PushPartialAggregationThroughJoin())));
-        builder.add(new PartialAggregationPushDown(metadata.getFunctionRegistry()));
+                ImmutableSet.of(new PushPartialAggregationThroughJoin(), new PushPartialAggregationThroughExchange(metadata.getFunctionRegistry()))));
         builder.add(new IterativeOptimizer(
                 stats,
                 statsCalculator,
