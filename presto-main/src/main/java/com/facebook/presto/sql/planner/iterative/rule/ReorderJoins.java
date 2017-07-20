@@ -84,6 +84,7 @@ public class ReorderJoins
         implements Rule
 {
     private static final Logger log = Logger.get(ReorderJoins.class);
+    private static final int JOIN_LIMIT = 10;
 
     private final CostComparator costComparator;
     private final StatsCalculator statsCalculator;
@@ -110,7 +111,7 @@ public class ReorderJoins
             return Optional.empty();
         }
 
-        MultiJoinNode multiJoinNode = toMultiJoinNode(joinNode, lookup);
+        MultiJoinNode multiJoinNode = toMultiJoinNode(joinNode, lookup, JOIN_LIMIT);
         if (multiJoinNode.getSources().size() < 2) {
             return Optional.empty();
         }
