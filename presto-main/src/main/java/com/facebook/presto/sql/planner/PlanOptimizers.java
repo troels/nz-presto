@@ -412,6 +412,7 @@ public class PlanOptimizers
                 stats,
                 ImmutableList.of(new PartialAggregationPushDown(metadata.getFunctionRegistry())),
                 ImmutableSet.of(new PushPartialAggregationThroughJoin(), new PushPartialAggregationThroughExchange(metadata.getFunctionRegistry()))));
+        builder.add(new PruneUnreferencedOutputs());
         builder.add(new IterativeOptimizer(
                 stats,
                 statsCalculator,
