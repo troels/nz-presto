@@ -183,11 +183,11 @@ public class ComparisonStatsCalculator
         StatisticRange intersect = leftRange.intersect(rightRange);
 
         double nullsFilterFactor = (1 - leftStats.getNullsFraction()) * (1 - rightStats.getNullsFraction());
-        double leftFilterValue = firstNonNaN(leftRange.overlapPercentWith(intersect), 1);
-        double rightFilterValue = firstNonNaN(rightRange.overlapPercentWith(intersect), 1);
-        double leftNdvInRange = leftFilterValue * leftRange.getDistinctValuesCount();
-        double rightNdvInRange = rightFilterValue * rightRange.getDistinctValuesCount();
-        double filterFactor = 1 * leftFilterValue * rightFilterValue / max(leftNdvInRange, rightNdvInRange, 1);
+        double leftFilterFactor = firstNonNaN(leftRange.overlapPercentWith(intersect), 1);
+        double rightFilterFactor = firstNonNaN(rightRange.overlapPercentWith(intersect), 1);
+        double leftNdvInRange = leftFilterFactor * leftRange.getDistinctValuesCount();
+        double rightNdvInRange = rightFilterFactor * rightRange.getDistinctValuesCount();
+        double filterFactor = 1 * leftFilterFactor * rightFilterFactor / max(leftNdvInRange, rightNdvInRange, 1);
         double retainedNdv = min(leftNdvInRange, rightNdvInRange);
 
         PlanNodeStatsEstimate estimate = inputStatistics.mapOutputRowCount(size -> size * filterFactor * nullsFilterFactor);
