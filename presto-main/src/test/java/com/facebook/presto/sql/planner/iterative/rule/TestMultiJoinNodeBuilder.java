@@ -47,7 +47,7 @@ import static org.testng.Assert.assertEquals;
 public class TestMultiJoinNodeBuilder
 {
     private final LocalQueryRunner queryRunner = new LocalQueryRunner(testSessionBuilder().build());
-    private static final int DEFAULT_JOIN_LIMIT=10;
+    private static final int DEFAULT_JOIN_LIMIT = 10;
 
     @Test(expectedExceptions = IllegalStateException.class)
     public void testDoesNotFireForOuterJoins()
