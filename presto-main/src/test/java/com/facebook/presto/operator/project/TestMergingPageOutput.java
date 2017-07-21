@@ -156,6 +156,6 @@ public class TestMergingPageOutput
     private static PageProcessorOutput createPageProcessorOutput(List<Page> pages)
     {
         long retainedSizeInBytes = pages.stream().mapToLong(Page::getRetainedSizeInBytes).sum();
-        return new PageProcessorOutput(retainedSizeInBytes, pages.iterator());
+        return new PageProcessorOutput(() -> retainedSizeInBytes, pages.iterator());
     }
 }
