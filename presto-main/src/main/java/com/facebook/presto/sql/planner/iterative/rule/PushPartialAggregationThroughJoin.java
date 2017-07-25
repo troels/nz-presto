@@ -13,13 +13,19 @@
  */
 package com.facebook.presto.sql.planner.iterative.rule;
 
+import com.facebook.presto.Session;
 import com.facebook.presto.matching.Pattern;
+import com.facebook.presto.sql.planner.DependencyExtractor;
+import com.facebook.presto.sql.planner.PlanNodeIdAllocator;
 import com.facebook.presto.sql.planner.Symbol;
-import com.facebook.presto.sql.planner.SymbolsExtractor;
+import com.facebook.presto.sql.planner.SymbolAllocator;
+import com.facebook.presto.sql.planner.iterative.Lookup;
 import com.facebook.presto.sql.planner.iterative.Rule;
 import com.facebook.presto.sql.planner.plan.AggregationNode;
+import com.facebook.presto.sql.planner.plan.Assignments;
 import com.facebook.presto.sql.planner.plan.JoinNode;
 import com.facebook.presto.sql.planner.plan.PlanNode;
+import com.facebook.presto.sql.planner.plan.ProjectNode;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
@@ -33,8 +39,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.facebook.presto.SystemSessionProperties.isPushAggregationThroughJoin;
-import static com.facebook.presto.sql.planner.SymbolsExtractor.extractUnique;
-import static com.facebook.presto.sql.planner.iterative.rule.Util.restrictOutputs;
+import static com.facebook.presto.sql.planner.DependencyExtractor.extractUnique;
 import static com.facebook.presto.sql.planner.plan.AggregationNode.Step.PARTIAL;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
@@ -43,7 +48,7 @@ import static com.google.common.collect.Sets.intersection;
 public class PushPartialAggregationThroughJoin
         implements Rule
 {
-    private static final Pattern PATTERN = Pattern.typeOf(AggregationNode.class);
+    private static final Pattern PATTERN = Pattern.matchByClass(AggregationNode.class);
 
     @Override
     public Pattern getPattern()
@@ -52,9 +57,9 @@ public class PushPartialAggregationThroughJoin
     }
 
     @Override
-    public Optional<PlanNode> apply(PlanNode node, Context context)
+    public Optional<PlanNode> apply(PlanNode node, Lookup lookup, PlanNodeIdAllocator idAllocator, SymbolAllocator symbolAllocator, Session session)
     {
-        if (!isPushAggregationThroughJoin(context.getSession())) {
+        if (!isPushAggregationThroughJoin(session)) {
             return Optional.empty();
         }
 
@@ -69,7 +74,7 @@ public class PushPartialAggregationThroughJoin
             return Optional.empty();
         }
 
-        PlanNode childNode = context.getLookup().resolve(aggregationNode.getSource());
+        PlanNode childNode = lookup.resolve(aggregationNode.getSource());
         if (!(childNode instanceof JoinNode)) {
             return Optional.empty();
         }
@@ -82,10 +87,10 @@ public class PushPartialAggregationThroughJoin
 
         // TODO: leave partial aggregation above Join?
         if (allAggregationsOn(aggregationNode.getAggregations(), joinNode.getLeft().getOutputSymbols())) {
-            return Optional.of(pushPartialToLeftChild(aggregationNode, joinNode, context));
+            return Optional.of(pushPartialToLeftChild(aggregationNode, joinNode, idAllocator));
         }
         else if (allAggregationsOn(aggregationNode.getAggregations(), joinNode.getRight().getOutputSymbols())) {
-            return Optional.of(pushPartialToRightChild(aggregationNode, joinNode, context));
+            return Optional.of(pushPartialToRightChild(aggregationNode, joinNode, idAllocator));
         }
 
         return Optional.empty();
@@ -97,20 +102,20 @@ public class PushPartialAggregationThroughJoin
         return symbols.containsAll(inputs);
     }
 
-    private PlanNode pushPartialToLeftChild(AggregationNode node, JoinNode child, Context context)
+    private PlanNode pushPartialToLeftChild(AggregationNode node, JoinNode child, PlanNodeIdAllocator idAllocator)
     {
         Set<Symbol> joinLeftChildSymbols = ImmutableSet.copyOf(child.getLeft().getOutputSymbols());
         List<Symbol> groupingSet = getPushedDownGroupingSet(node, joinLeftChildSymbols, intersection(getJoinRequiredSymbols(child), joinLeftChildSymbols));
         AggregationNode pushedAggregation = replaceAggregationSource(node, child.getLeft(), groupingSet);
-        return pushPartialToJoin(node, child, pushedAggregation, child.getRight(), context);
+        return pushPartialToJoin(node, child, pushedAggregation, child.getRight(), idAllocator);
     }
 
-    private PlanNode pushPartialToRightChild(AggregationNode node, JoinNode child, Context context)
+    private PlanNode pushPartialToRightChild(AggregationNode node, JoinNode child, PlanNodeIdAllocator idAllocator)
     {
         Set<Symbol> joinRightChildSymbols = ImmutableSet.copyOf(child.getRight().getOutputSymbols());
         List<Symbol> groupingSet = getPushedDownGroupingSet(node, joinRightChildSymbols, intersection(getJoinRequiredSymbols(child), joinRightChildSymbols));
         AggregationNode pushedAggregation = replaceAggregationSource(node, child.getRight(), groupingSet);
-        return pushPartialToJoin(node, child, child.getLeft(), pushedAggregation, context);
+        return pushPartialToJoin(node, child, child.getLeft(), pushedAggregation, idAllocator);
     }
 
     private Set<Symbol> getJoinRequiredSymbols(JoinNode node)
@@ -118,7 +123,7 @@ public class PushPartialAggregationThroughJoin
         return Streams.concat(
                 node.getCriteria().stream().map(JoinNode.EquiJoinClause::getLeft),
                 node.getCriteria().stream().map(JoinNode.EquiJoinClause::getRight),
-                node.getFilter().map(SymbolsExtractor::extractUnique).orElse(ImmutableSet.of()).stream(),
+                node.getFilter().map(DependencyExtractor::extractUnique).orElse(ImmutableSet.of()).stream(),
                 node.getLeftHashSymbol().map(ImmutableSet::of).orElse(ImmutableSet.of()).stream(),
                 node.getRightHashSymbol().map(ImmutableSet::of).orElse(ImmutableSet.of()).stream())
                 .collect(toImmutableSet());
@@ -162,7 +167,7 @@ public class PushPartialAggregationThroughJoin
             JoinNode child,
             PlanNode leftChild,
             PlanNode rightChild,
-            Context context)
+            PlanNodeIdAllocator idAllocator)
     {
         JoinNode joinNode = new JoinNode(
                 child.getId(),
@@ -178,6 +183,23 @@ public class PushPartialAggregationThroughJoin
                 child.getLeftHashSymbol(),
                 child.getRightHashSymbol(),
                 child.getDistributionType());
-        return restrictOutputs(context.getIdAllocator(), joinNode, ImmutableSet.copyOf(aggregation.getOutputSymbols())).orElse(joinNode);
+        return restrictOutputs(idAllocator, joinNode, ImmutableSet.copyOf(aggregation.getOutputSymbols())).orElse(joinNode);
+    }
+
+    private static Optional<PlanNode> restrictOutputs(PlanNodeIdAllocator idAllocator, PlanNode node, Set<Symbol> permittedOutputs)
+    {
+        List<Symbol> restrictedOutputs = node.getOutputSymbols().stream()
+                .filter(permittedOutputs::contains)
+                .collect(toImmutableList());
+
+        if (restrictedOutputs.size() == node.getOutputSymbols().size()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(
+                new ProjectNode(
+                        idAllocator.getNextId(),
+                        node,
+                        Assignments.identity(restrictedOutputs)));
     }
 }
