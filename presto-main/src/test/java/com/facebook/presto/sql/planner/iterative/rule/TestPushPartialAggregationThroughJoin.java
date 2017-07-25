@@ -14,7 +14,7 @@
 package com.facebook.presto.sql.planner.iterative.rule;
 
 import com.facebook.presto.sql.planner.assertions.PlanMatchPattern;
-import com.facebook.presto.sql.planner.iterative.rule.test.BaseRuleTest;
+import com.facebook.presto.sql.planner.iterative.rule.test.RuleTester;
 import com.facebook.presto.sql.planner.plan.JoinNode.EquiJoinClause;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -23,6 +23,7 @@ import org.testng.annotations.Test;
 import java.util.Optional;
 
 import static com.facebook.presto.SystemSessionProperties.PUSH_PARTIAL_AGGREGATION_THROUGH_JOIN;
+import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.aggregation;
 import static com.facebook.presto.sql.planner.assertions.PlanMatchPattern.equiJoinClause;
@@ -35,26 +36,25 @@ import static com.facebook.presto.sql.planner.plan.AggregationNode.Step.PARTIAL;
 import static com.facebook.presto.sql.planner.plan.JoinNode.Type.INNER;
 
 public class TestPushPartialAggregationThroughJoin
-        extends BaseRuleTest
 {
     @Test
     public void testPushesPartialAggregationThroughJoin()
     {
-        tester().assertThat(new PushPartialAggregationThroughJoin())
+        new RuleTester().assertThat(new PushPartialAggregationThroughJoin())
                 .setSystemProperty(PUSH_PARTIAL_AGGREGATION_THROUGH_JOIN, "true")
                 .on(p -> p.aggregation(ab -> ab
                         .source(
                                 p.join(
                                         INNER,
-                                        p.values(p.symbol("LEFT_EQUI"), p.symbol("LEFT_NON_EQUI"), p.symbol("LEFT_GROUP_BY"), p.symbol("LEFT_AGGR"), p.symbol("LEFT_HASH")),
-                                        p.values(p.symbol("RIGHT_EQUI"), p.symbol("RIGHT_NON_EQUI"), p.symbol("RIGHT_GROUP_BY"), p.symbol("RIGHT_HASH")),
-                                        ImmutableList.of(new EquiJoinClause(p.symbol("LEFT_EQUI"), p.symbol("RIGHT_EQUI"))),
-                                        ImmutableList.of(p.symbol("LEFT_GROUP_BY"), p.symbol("LEFT_AGGR"), p.symbol("RIGHT_GROUP_BY")),
+                                        p.values(p.symbol("LEFT_EQUI", BIGINT), p.symbol("LEFT_NON_EQUI", BIGINT), p.symbol("LEFT_GROUP_BY", BIGINT), p.symbol("LEFT_AGGR", BIGINT), p.symbol("LEFT_HASH", BIGINT)),
+                                        p.values(p.symbol("RIGHT_EQUI", BIGINT), p.symbol("RIGHT_NON_EQUI", BIGINT), p.symbol("RIGHT_GROUP_BY", BIGINT), p.symbol("RIGHT_HASH", BIGINT)),
+                                        ImmutableList.of(new EquiJoinClause(p.symbol("LEFT_EQUI", BIGINT), p.symbol("RIGHT_EQUI", BIGINT))),
+                                        ImmutableList.of(p.symbol("LEFT_GROUP_BY", BIGINT), p.symbol("LEFT_AGGR", BIGINT), p.symbol("RIGHT_GROUP_BY", BIGINT)),
                                         Optional.of(expression("LEFT_NON_EQUI <= RIGHT_NON_EQUI")),
-                                        Optional.of(p.symbol("LEFT_HASH")),
-                                        Optional.of(p.symbol("RIGHT_HASH"))))
+                                        Optional.of(p.symbol("LEFT_HASH", BIGINT)),
+                                        Optional.of(p.symbol("RIGHT_HASH", BIGINT))))
                         .addAggregation(p.symbol("AVG", DOUBLE), expression("AVG(LEFT_AGGR)"), ImmutableList.of(DOUBLE))
-                        .addGroupingSet(p.symbol("LEFT_GROUP_BY"), p.symbol("RIGHT_GROUP_BY"))
+                        .addGroupingSet(p.symbol("LEFT_GROUP_BY", BIGINT), p.symbol("RIGHT_GROUP_BY", BIGINT))
                         .step(PARTIAL)))
                 .matches(project(ImmutableMap.of(
                         "LEFT_GROUP_BY", PlanMatchPattern.expression("LEFT_GROUP_BY"),
