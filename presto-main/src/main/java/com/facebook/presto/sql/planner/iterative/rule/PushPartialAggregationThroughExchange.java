@@ -13,13 +13,17 @@
  */
 package com.facebook.presto.sql.planner.iterative.rule;
 
+import com.facebook.presto.Session;
 import com.facebook.presto.matching.Pattern;
 import com.facebook.presto.metadata.FunctionRegistry;
 import com.facebook.presto.metadata.Signature;
 import com.facebook.presto.operator.aggregation.InternalAggregationFunction;
 import com.facebook.presto.sql.planner.Partitioning;
 import com.facebook.presto.sql.planner.PartitioningScheme;
+import com.facebook.presto.sql.planner.PlanNodeIdAllocator;
 import com.facebook.presto.sql.planner.Symbol;
+import com.facebook.presto.sql.planner.SymbolAllocator;
+import com.facebook.presto.sql.planner.iterative.Lookup;
 import com.facebook.presto.sql.planner.iterative.Rule;
 import com.facebook.presto.sql.planner.optimizations.SymbolMapper;
 import com.facebook.presto.sql.planner.plan.AggregationNode;
@@ -51,7 +55,7 @@ import static java.util.Objects.requireNonNull;
 public class PushPartialAggregationThroughExchange
         implements Rule
 {
-    private static final Pattern PATTERN = Pattern.typeOf(AggregationNode.class);
+    private static final Pattern PATTERN = Pattern.matchByClass(AggregationNode.class);
 
     private final FunctionRegistry functionRegistry;
 
@@ -67,7 +71,7 @@ public class PushPartialAggregationThroughExchange
     }
 
     @Override
-    public Optional<PlanNode> apply(PlanNode node, Context context)
+    public Optional<PlanNode> apply(PlanNode node, Lookup lookup, PlanNodeIdAllocator idAllocator, SymbolAllocator symbolAllocator, Session session)
     {
         AggregationNode aggregationNode = (AggregationNode) node;
 
@@ -79,14 +83,14 @@ public class PushPartialAggregationThroughExchange
             checkState(
                     decomposable,
                     "Distributed aggregation with empty grouping set requires partial but functions are not decomposable");
-            return Optional.of(split(aggregationNode, context));
+            return Optional.of(split(aggregationNode, idAllocator, symbolAllocator));
         }
 
         if (!decomposable) {
             return Optional.empty();
         }
 
-        PlanNode childNode = context.getLookup().resolve(aggregationNode.getSource());
+        PlanNode childNode = lookup.resolve(aggregationNode.getSource());
         if (!(childNode instanceof ExchangeNode)) {
             return Optional.empty();
         }
@@ -124,16 +128,16 @@ public class PushPartialAggregationThroughExchange
         switch (aggregationNode.getStep()) {
             case SINGLE:
                 // Split it into a FINAL on top of a PARTIAL and
-                return Optional.of(split(aggregationNode, context));
+                return Optional.of(split(aggregationNode, idAllocator, symbolAllocator));
             case PARTIAL:
                 // Push it underneath each branch of the exchange
-                return Optional.of(pushPartial(aggregationNode, exchangeNode, context));
+                return Optional.of(pushPartial(aggregationNode, exchangeNode, idAllocator));
             default:
                 return Optional.empty();
         }
     }
 
-    private PlanNode pushPartial(AggregationNode aggregation, ExchangeNode exchange, Context context)
+    private PlanNode pushPartial(AggregationNode aggregation, ExchangeNode exchange, PlanNodeIdAllocator idAllocator)
     {
         List<PlanNode> partials = new ArrayList<>();
         for (int i = 0; i < exchange.getSources().size(); i++) {
@@ -149,7 +153,7 @@ public class PushPartialAggregationThroughExchange
             }
 
             SymbolMapper symbolMapper = mappingsBuilder.build();
-            AggregationNode mappedPartial = symbolMapper.map(aggregation, source, context.getIdAllocator());
+            AggregationNode mappedPartial = symbolMapper.map(aggregation, source, idAllocator);
 
             Assignments.Builder assignments = Assignments.builder();
 
@@ -157,7 +161,7 @@ public class PushPartialAggregationThroughExchange
                 Symbol input = symbolMapper.map(output);
                 assignments.put(output, input.toSymbolReference());
             }
-            partials.add(new ProjectNode(context.getIdAllocator().getNextId(), mappedPartial, assignments.build()));
+            partials.add(new ProjectNode(idAllocator.getNextId(), mappedPartial, assignments.build()));
         }
 
         for (PlanNode node : partials) {
@@ -174,15 +178,17 @@ public class PushPartialAggregationThroughExchange
                 exchange.getPartitioningScheme().getBucketToPartition());
 
         return new ExchangeNode(
-                context.getIdAllocator().getNextId(),
+                idAllocator.getNextId(),
                 exchange.getType(),
                 exchange.getScope(),
                 partitioning,
                 partials,
-                ImmutableList.copyOf(Collections.nCopies(partials.size(), aggregation.getOutputSymbols())));
+                ImmutableList.copyOf(Collections.nCopies(partials.size(), aggregation.getOutputSymbols())),
+                exchange.isOrderSensitive(),
+                exchange.getOrderingScheme());
     }
 
-    private PlanNode split(AggregationNode node, Context context)
+    private PlanNode split(AggregationNode node, PlanNodeIdAllocator idAllocator, SymbolAllocator symbolAllocator)
     {
         // otherwise, add a partial and final with an exchange in between
         Map<Symbol, AggregationNode.Aggregation> intermediateAggregation = new HashMap<>();
@@ -191,7 +197,7 @@ public class PushPartialAggregationThroughExchange
             AggregationNode.Aggregation originalAggregation = entry.getValue();
             Signature signature = originalAggregation.getSignature();
             InternalAggregationFunction function = functionRegistry.getAggregateFunctionImplementation(signature);
-            Symbol intermediateSymbol = context.getSymbolAllocator().newSymbol(signature.getName(), function.getIntermediateType());
+            Symbol intermediateSymbol = symbolAllocator.newSymbol(signature.getName(), function.getIntermediateType());
 
             intermediateAggregation.put(intermediateSymbol, new AggregationNode.Aggregation(originalAggregation.getCall(), signature, originalAggregation.getMask()));
 
@@ -204,7 +210,7 @@ public class PushPartialAggregationThroughExchange
         }
 
         PlanNode partial = new AggregationNode(
-                context.getIdAllocator().getNextId(),
+                idAllocator.getNextId(),
                 node.getSource(),
                 intermediateAggregation,
                 node.getGroupingSets(),
