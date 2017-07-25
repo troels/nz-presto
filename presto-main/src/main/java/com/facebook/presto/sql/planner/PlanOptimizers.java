@@ -409,10 +409,12 @@ public class PlanOptimizers
         // This optimizer must be run after all exchange-related optimizers
         builder.add(new IterativeOptimizer(
                 stats,
+                statsCalculator,
+                costCalculator,
                 ImmutableSet.of(
                         new PushPartialAggregationThroughJoin(),
-                        new PushPartialAggregationThroughExchange(metadata.getFunctionRegistry()),
-                        new PruneJoinColumns())));
+                        new PushPartialAggregationThroughExchange(metadata.getFunctionRegistry()))));
+        builder.add(new PruneUnreferencedOutputs());
         builder.add(new IterativeOptimizer(
                 stats,
                 statsCalculator,
