@@ -368,7 +368,7 @@ public class PredicatePushDown
                         .collect(Collectors.toMap(key -> key, Symbol::toSymbolReference)));
 
                 // Create new projections for the new join clauses
-                ImmutableList.Builder<JoinNode.EquiJoinClause> joinConditionBuilder = ImmutableList.builder();
+                List<JoinNode.EquiJoinClause> equiJoinClauses = new ArrayList<>();
                 ImmutableList.Builder<Expression> joinFilterBuilder = ImmutableList.builder();
                 for (Expression conjunct : extractConjuncts(newJoinPredicate)) {
                     if (joinEqualityExpression(node.getLeft().getOutputSymbols()).test(conjunct)) {
@@ -388,7 +388,7 @@ public class PredicatePushDown
                             rightProjections.put(rightSymbol, rightExpression);
                         }
 
-                        joinConditionBuilder.add(new JoinNode.EquiJoinClause(leftSymbol, rightSymbol));
+                        equiJoinClauses.add(new JoinNode.EquiJoinClause(leftSymbol, rightSymbol));
                     }
                     else {
                         joinFilterBuilder.add(conjunct);
@@ -409,7 +409,7 @@ public class PredicatePushDown
                         leftSource,
                         rightSource,
                         newJoinFilter,
-                        joinConditionBuilder.build(),
+                        equiJoinClauses.build(),
                         node.getLeftHashSymbol(),
                         node.getRightHashSymbol(),
                         node.getDistributionType());
