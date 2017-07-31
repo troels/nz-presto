@@ -147,6 +147,7 @@ import static com.facebook.presto.spi.statistics.TableStatistics.EMPTY_STATISTIC
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verify;
+import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.Iterables.concat;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
@@ -374,7 +375,10 @@ public class HiveMetadata
             return EMPTY_STATISTICS;
         }
         List<HivePartition> hivePartitions = partitionManager.getPartitions(metastore, tableHandle, constraint).getPartitions();
-        Map<String, ColumnHandle> tableColumns = getColumnHandles(session, tableHandle);
+        Map<String, ColumnHandle> tableColumns = getColumnHandles(session, tableHandle)
+                .entrySet().stream()
+                .filter(entry -> !((HiveColumnHandle) entry.getValue()).isHidden())
+                .collect(toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
         return hiveStatisticsProvider.getTableStatistics(session, tableHandle, hivePartitions, tableColumns);
     }
 

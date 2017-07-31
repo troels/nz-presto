@@ -105,9 +105,6 @@ public class MetastoreHiveStatisticsProvider
         for (Map.Entry<String, ColumnHandle> columnEntry : tableColumns.entrySet()) {
             String columnName = columnEntry.getKey();
             HiveColumnHandle hiveColumnHandle = (HiveColumnHandle) columnEntry.getValue();
-            if (getColumnMetadata(hiveColumnHandle).isHidden()) {
-                continue;
-            }
             ColumnStatistics.Builder columnStatistics = ColumnStatistics.builder();
             RangeColumnStatistics.Builder rangeStatistics = RangeColumnStatistics.builder();
 
