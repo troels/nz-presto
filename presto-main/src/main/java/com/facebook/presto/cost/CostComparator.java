@@ -66,9 +66,6 @@ public class CostComparator
                 + right.getMemoryCost() * memoryWeight
                 + right.getNetworkCost() * networkWeight;
 
-        System.out.println("leftCost=" + leftCost);
-        System.out.println("rightCost=" + rightCost);
-
         return Double.compare(leftCost, rightCost);
     }
 }
