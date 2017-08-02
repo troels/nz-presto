@@ -204,13 +204,13 @@ public class TestReorderJoins
                         new Join(
                                 tpchSf10Table("lineitem"),
                                 new Join(
-                                        tpchSf10Table("orders"),
-                                        new Join(
-                                                tpchSf10Table("customer"),
-                                                tpchSf10Table("nation")))),
+                                        tpchSf10Table("supplier"),
+                                        tpchSf10Table("nation"))),
                         new Join(
-                                tpchSf10Table("supplier"),
-                                tpchSf10Table("nation"))));
+                                tpchSf10Table("orders"),
+                                new Join(
+                                        tpchSf10Table("customer"),
+                                        tpchSf10Table("nation")))));
     }
 
     @Test
