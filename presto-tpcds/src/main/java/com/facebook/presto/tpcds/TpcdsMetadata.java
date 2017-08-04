@@ -209,7 +209,7 @@ public class TpcdsMetadata
         return "sf" + scaleFactor;
     }
 
-    private static int schemaNameToScaleFactor(String schemaName)
+    public static int schemaNameToScaleFactor(String schemaName)
     {
         if (!schemaName.startsWith("sf")) {
             return -1;
