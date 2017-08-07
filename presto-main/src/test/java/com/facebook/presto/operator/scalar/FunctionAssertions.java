@@ -72,6 +72,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
+import io.airlift.units.DataSize;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 
@@ -112,6 +113,7 @@ import static com.facebook.presto.sql.tree.BooleanLiteral.TRUE_LITERAL;
 import static com.facebook.presto.testing.TestingTaskContext.createTaskContext;
 import static io.airlift.concurrent.Threads.daemonThreadsNamed;
 import static io.airlift.testing.Assertions.assertInstanceOf;
+import static io.airlift.units.DataSize.Unit.BYTE;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.Executors.newCachedThreadPool;
 import static org.testng.Assert.assertEquals;
@@ -597,7 +599,9 @@ public final class FunctionAssertions
                 0,
                 new PlanNodeId("test"),
                 () -> processor,
-                ImmutableList.of(pageProjection.getType()));
+                ImmutableList.of(pageProjection.getType()),
+                new DataSize(0, BYTE),
+                0);
         return operatorFactory.createOperator(createDriverContext(session));
     }
 
@@ -606,7 +610,7 @@ public final class FunctionAssertions
         try {
             Supplier<PageProcessor> processor = compiler.compilePageProcessor(Optional.of(filter), ImmutableList.of());
 
-            return new FilterAndProjectOperatorFactory(0, new PlanNodeId("test"), processor, ImmutableList.of());
+            return new FilterAndProjectOperatorFactory(0, new PlanNodeId("test"), processor, ImmutableList.of(), new DataSize(0, BYTE), 0);
         }
         catch (Throwable e) {
             if (e instanceof UncheckedExecutionException) {
@@ -620,7 +624,7 @@ public final class FunctionAssertions
     {
         try {
             Supplier<PageProcessor> processor = compiler.compilePageProcessor(filter, ImmutableList.of(projection));
-            return new FilterAndProjectOperatorFactory(0, new PlanNodeId("test"), processor, ImmutableList.of(projection.getType()));
+            return new FilterAndProjectOperatorFactory(0, new PlanNodeId("test"), processor, ImmutableList.of(projection.getType()), new DataSize(0, BYTE), 0);
         }
         catch (Throwable e) {
             if (e instanceof UncheckedExecutionException) {
@@ -650,7 +654,9 @@ public final class FunctionAssertions
                     cursorProcessor,
                     pageProcessor,
                     ImmutableList.of(),
-                    ImmutableList.of(projection.getType()));
+                    ImmutableList.of(projection.getType()),
+                    new DataSize(0, BYTE),
+                    0);
         }
         catch (Throwable e) {
             if (e instanceof UncheckedExecutionException) {

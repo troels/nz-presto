@@ -20,6 +20,7 @@ import io.airlift.configuration.ConfigDescription;
 import io.airlift.configuration.DefunctConfig;
 import io.airlift.units.DataSize;
 import io.airlift.units.Duration;
+import io.airlift.units.MaxDataSize;
 
 import javax.validation.constraints.DecimalMax;
 import javax.validation.constraints.DecimalMin;
@@ -33,6 +34,7 @@ import static com.facebook.presto.sql.analyzer.FeaturesConfig.JoinDistributionTy
 import static com.facebook.presto.sql.analyzer.FeaturesConfig.JoinReorderingStrategy.ELIMINATE_CROSS_JOINS;
 import static com.facebook.presto.sql.analyzer.RegexLibrary.JONI;
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static io.airlift.units.DataSize.Unit.KILOBYTE;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MINUTES;
 
@@ -87,6 +89,9 @@ public class FeaturesConfig
     private boolean parseDecimalLiteralsAsDouble;
 
     private Duration iterativeOptimizerTimeout = new Duration(3, MINUTES); // by default let optimizer wait a long time in case it retrieves some data from ConnectorMetadata
+
+    private DataSize filterAndProjectMinOutputPageSize = new DataSize(25, KILOBYTE);
+    private int filterAndProjectMinOutputPageRowCount = 256;
 
     public enum JoinReorderingStrategy
     {
@@ -590,5 +595,31 @@ public class FeaturesConfig
     public JoinDistributionType getJoinDistributionType()
     {
         return joinDistributionType;
+    }
+
+    @MaxDataSize("1MB")
+    public DataSize getFilterAndProjectMinOutputPageSize()
+    {
+        return filterAndProjectMinOutputPageSize;
+    }
+
+    @Config("experimental.filter-and-project-min-output-page-size")
+    public FeaturesConfig setFilterAndProjectMinOutputPageSize(DataSize filterAndProjectMinOutputPageSize)
+    {
+        this.filterAndProjectMinOutputPageSize = filterAndProjectMinOutputPageSize;
+        return this;
+    }
+
+    @Min(0)
+    public int getFilterAndProjectMinOutputPageRowCount()
+    {
+        return filterAndProjectMinOutputPageRowCount;
+    }
+
+    @Config("experimental.filter-and-project-min-output-page-row-count")
+    public FeaturesConfig setFilterAndProjectMinOutputPageRowCount(int filterAndProjectMinOutputPageRowCount)
+    {
+        this.filterAndProjectMinOutputPageRowCount = filterAndProjectMinOutputPageRowCount;
+        return this;
     }
 }

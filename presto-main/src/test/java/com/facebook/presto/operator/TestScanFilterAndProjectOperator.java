@@ -28,6 +28,7 @@ import com.facebook.presto.testing.MaterializedResult;
 import com.facebook.presto.testing.TestingSplit;
 import com.facebook.presto.testing.TestingTransactionHandle;
 import com.google.common.collect.ImmutableList;
+import io.airlift.units.DataSize;
 import org.testng.annotations.Test;
 
 import java.util.List;
@@ -43,6 +44,7 @@ import static com.facebook.presto.sql.relational.Expressions.field;
 import static com.facebook.presto.testing.TestingTaskContext.createTaskContext;
 import static com.facebook.presto.testing.assertions.Assert.assertEquals;
 import static io.airlift.concurrent.Threads.daemonThreadsNamed;
+import static io.airlift.units.DataSize.Unit.BYTE;
 import static java.util.concurrent.Executors.newCachedThreadPool;
 import static org.testng.Assert.assertTrue;
 
@@ -75,7 +77,9 @@ public class TestScanFilterAndProjectOperator
                 cursorProcessor,
                 pageProcessor,
                 ImmutableList.of(),
-                ImmutableList.of(VARCHAR));
+                ImmutableList.of(VARCHAR),
+                new DataSize(0, BYTE),
+                0);
 
         SourceOperator operator = factory.createOperator(driverContext);
         operator.addSplit(new Split(new ConnectorId("test"), TestingTransactionHandle.create(), TestingSplit.createLocalSplit()));
@@ -107,7 +111,9 @@ public class TestScanFilterAndProjectOperator
                 cursorProcessor,
                 pageProcessor,
                 ImmutableList.of(),
-                ImmutableList.of(VARCHAR));
+                ImmutableList.of(VARCHAR),
+                new DataSize(0, BYTE),
+                0);
 
         SourceOperator operator = factory.createOperator(driverContext);
         operator.addSplit(new Split(new ConnectorId("test"), TestingTransactionHandle.create(), TestingSplit.createLocalSplit()));

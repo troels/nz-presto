@@ -30,6 +30,8 @@ import static com.facebook.presto.sql.analyzer.RegexLibrary.RE2J;
 import static io.airlift.configuration.testing.ConfigAssertions.assertDeprecatedEquivalence;
 import static io.airlift.configuration.testing.ConfigAssertions.assertFullMapping;
 import static io.airlift.configuration.testing.ConfigAssertions.assertRecordedDefaults;
+import static io.airlift.units.DataSize.Unit.KILOBYTE;
+import static io.airlift.units.DataSize.Unit.MEGABYTE;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
@@ -77,7 +79,9 @@ public class TestFeaturesConfig
                 .setUseNewStatsCalculator(true)
                 .setParseDecimalLiteralsAsDouble(false)
                 .setDistributedSortEnabled(false)
-                .setRedistributeSort(true));
+                .setRedistributeSort(true)
+                .setFilterAndProjectMinOutputPageSize(new DataSize(25, KILOBYTE))
+                .setFilterAndProjectMinOutputPageRowCount(256));
     }
 
     @Test
@@ -123,6 +127,8 @@ public class TestFeaturesConfig
                 .put("deprecated.parse-decimal-literals-as-double", "true")
                 .put("experimental.distributed-sort", "true")
                 .put("experimental.redistribute-sort", "false")
+                .put("experimental.filter-and-project-min-output-page-size", "1MB")
+                .put("experimental.filter-and-project-min-output-page-row-count", "2048")
                 .build();
         Map<String, String> properties = new ImmutableMap.Builder<String, String>()
                 .put("cpu-cost-weight", "0.4")
@@ -164,6 +170,8 @@ public class TestFeaturesConfig
                 .put("deprecated.parse-decimal-literals-as-double", "true")
                 .put("experimental.distributed-sort", "true")
                 .put("experimental.redistribute-sort", "false")
+                .put("experimental.filter-and-project-min-output-page-size", "1MB")
+                .put("experimental.filter-and-project-min-output-page-row-count", "2048")
                 .build();
 
         FeaturesConfig expected = new FeaturesConfig()
@@ -205,7 +213,9 @@ public class TestFeaturesConfig
                 .setUseNewStatsCalculator(false)
                 .setParseDecimalLiteralsAsDouble(true)
                 .setDistributedSortEnabled(true)
-                .setRedistributeSort(false);
+                .setRedistributeSort(false)
+                .setFilterAndProjectMinOutputPageSize(new DataSize(1, MEGABYTE))
+                .setFilterAndProjectMinOutputPageRowCount(2048);
 
         assertFullMapping(properties, expected);
         assertDeprecatedEquivalence(FeaturesConfig.class, properties, propertiesLegacy);

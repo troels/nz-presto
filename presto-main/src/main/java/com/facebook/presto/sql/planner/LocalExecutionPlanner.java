@@ -189,6 +189,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.facebook.presto.SystemSessionProperties.getAggregationOperatorUnspillMemoryLimit;
+import static com.facebook.presto.SystemSessionProperties.getFilterAndProjectMinOutputPageRowCount;
+import static com.facebook.presto.SystemSessionProperties.getFilterAndProjectMinOutputPageSize;
 import static com.facebook.presto.SystemSessionProperties.getTaskConcurrency;
 import static com.facebook.presto.SystemSessionProperties.getTaskWriterCount;
 import static com.facebook.presto.SystemSessionProperties.isExchangeCompressionEnabled;
@@ -1149,7 +1151,9 @@ public class LocalExecutionPlanner
                             cursorProcessor,
                             pageProcessor,
                             columns,
-                            getTypes(rewrittenProjections, expressionTypes));
+                            getTypes(rewrittenProjections, expressionTypes),
+                            getFilterAndProjectMinOutputPageSize(session),
+                            getFilterAndProjectMinOutputPageRowCount(session));
 
                     return new PhysicalOperation(operatorFactory, outputMappings);
                 }
@@ -1160,7 +1164,9 @@ public class LocalExecutionPlanner
                             context.getNextOperatorId(),
                             planNodeId,
                             pageProcessor,
-                            getTypes(rewrittenProjections, expressionTypes));
+                            getTypes(rewrittenProjections, expressionTypes),
+                            getFilterAndProjectMinOutputPageSize(session),
+                            getFilterAndProjectMinOutputPageRowCount(session));
 
                     return new PhysicalOperation(operatorFactory, outputMappings, source);
                 }
@@ -1201,7 +1207,9 @@ public class LocalExecutionPlanner
                         () -> cursorProcessor,
                         () -> pageProcessor,
                         columns,
-                        getTypes(rewrittenProjections, expressionTypes));
+                        getTypes(rewrittenProjections, expressionTypes),
+                        getFilterAndProjectMinOutputPageSize(session),
+                        getFilterAndProjectMinOutputPageRowCount(session));
 
                 return new PhysicalOperation(operatorFactory, outputMappings);
             }
@@ -1210,7 +1218,9 @@ public class LocalExecutionPlanner
                         context.getNextOperatorId(),
                         planNodeId,
                         () -> pageProcessor,
-                        getTypes(rewrittenProjections, expressionTypes));
+                        getTypes(rewrittenProjections, expressionTypes),
+                        getFilterAndProjectMinOutputPageSize(session),
+                        getFilterAndProjectMinOutputPageRowCount(session));
                 return new PhysicalOperation(operatorFactory, outputMappings, source);
             }
         }

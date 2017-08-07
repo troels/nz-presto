@@ -26,6 +26,7 @@ import com.facebook.presto.sql.relational.Expressions;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.primitives.Ints;
+import io.airlift.units.DataSize;
 
 import java.util.List;
 import java.util.Optional;
@@ -35,6 +36,7 @@ import java.util.stream.IntStream;
 import static com.facebook.presto.operator.FilterAndProjectOperator.FilterAndProjectOperatorFactory;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static io.airlift.units.DataSize.Unit.BYTE;
 import static java.util.Objects.requireNonNull;
 
 public class DynamicTupleFilterFactory
@@ -80,7 +82,7 @@ public class DynamicTupleFilterFactory
     {
         Page filterTuple = getFilterTuple(tuplePage);
         Supplier<PageProcessor> processor = createPageProcessor(filterTuple);
-        return new FilterAndProjectOperatorFactory(filterOperatorId, planNodeId, processor, outputTypes);
+        return new FilterAndProjectOperatorFactory(filterOperatorId, planNodeId, processor, outputTypes, new DataSize(0, BYTE), 0);
     }
 
     @VisibleForTesting
