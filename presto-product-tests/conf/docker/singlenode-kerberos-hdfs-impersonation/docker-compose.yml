@@ -1,6 +1,14 @@
 version: '2'
 services:
+  hadoop-master:
+    ports:
+      - '88:88/udp'
+      - '464:464'
+      - '749:749'
 
   presto-master:
     volumes:
       - ../../../conf/presto/etc/environment-specific-catalogs/singlenode-kerberos-hdfs-impersonation/hive.properties:/docker/volumes/conf/presto/etc/catalog/hive.properties
+    ports:
+      - '7778:7778'
+
