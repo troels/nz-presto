@@ -254,8 +254,8 @@ public class PlanPrinter
                             stageStats.getTotalCpuTime(),
                             formatPositions(stageStats.getProcessedInputPositions()),
                             stageStats.getProcessedInputDataSize(),
-                            avgPositionsPerTask,
-                            sdAmongTasks,
+                            formatDouble(avgPositionsPerTask),
+                            formatDouble(sdAmongTasks),
                             formatPositions(stageStats.getOutputPositions()),
                             stageStats.getOutputDataSize()));
             if (isNonZero(stageStats.getSpilledDataSize())) {
@@ -366,9 +366,9 @@ public class PlanPrinter
             output.append(indentString(indent));
             output.append("Cost: ?");
             if (printInput) {
-                output.append(", Input: ? lines (?B)");
+                output.append(", Input: ? rows (?B)");
             }
-            output.append(", Output: ? lines (?B)");
+            output.append(", Output: ? rows (?B)");
             if (printFiltered) {
                 output.append(", Filtered: ?%");
             }
@@ -422,7 +422,7 @@ public class PlanPrinter
 
             output.append(indentString(indent));
             output.append(translatedOperatorType);
-            output.append(format(Locale.US, "Input avg.: %s lines, Input std.dev.: %s%%",
+            output.append(format(Locale.US, "Input avg.: %s rows, Input std.dev.: %s%%",
                     formatDouble(inputAverage), formatDouble(100.0d * inputStdDevs.get(operator) / inputAverage)));
             output.append('\n');
 
