@@ -215,7 +215,7 @@ public class PlanPrinter
                 .collect(toImmutableList());
         for (StageInfo stageInfo : allStages) {
             Map<PlanNodeId, PlanNodeStats> aggregatedStats = aggregatePlanNodeStats(stageInfo);
-            builder.append(formatFragment(metadata, lookup, session, stageInfo.getPlan(), Optional.of(stageInfo.getStageStats()), Optional.of(aggregatedStats), verbose));
+            builder.append(formatFragment(metadata, lookup, session, stageInfo.getPlan(), Optional.of(stageInfo), Optional.of(aggregatedStats), verbose));
         }
 
         return builder.toString();
@@ -236,21 +236,32 @@ public class PlanPrinter
         return builder.toString();
     }
 
-    private static String formatFragment(Metadata metadata, Lookup lookup, Session session, PlanFragment fragment, Optional<StageStats> stageStats, Optional<Map<PlanNodeId, PlanNodeStats>> planNodeStats, boolean verbose)
+    private static String formatFragment(Metadata metadata, Lookup lookup, Session session, PlanFragment fragment, Optional<StageInfo> stageInfo, Optional<Map<PlanNodeId, PlanNodeStats>> planNodeStats, boolean verbose)
     {
         StringBuilder builder = new StringBuilder();
         builder.append(format("Fragment %s [%s]\n",
                 fragment.getId(),
                 fragment.getPartitioning()));
+        if (stageInfo.isPresent()) {
+            StageStats stageStats = stageInfo.get().getStageStats();
 
-        if (stageStats.isPresent()) {
+            double avgPositionsPerTask = stageInfo.get().getTasks().stream().mapToLong(task -> task.getStats().getProcessedInputPositions()).average().orElse(Double.NaN);
+            double squaredDifferences = stageInfo.get().getTasks().stream().mapToDouble(task -> Math.pow(task.getStats().getProcessedInputPositions() - avgPositionsPerTask, 2)).sum();
+            double sdAmongTasks = Math.sqrt(squaredDifferences / stageInfo.get().getTasks().size());
+
             builder.append(indentString(1))
-                    .append(format("CPU: %s, Input: %s (%s), Output: %s (%s)\n",
-                            stageStats.get().getTotalCpuTime(),
-                            formatPositions(stageStats.get().getProcessedInputPositions()),
-                            stageStats.get().getProcessedInputDataSize(),
-                            formatPositions(stageStats.get().getOutputPositions()),
-                            stageStats.get().getOutputDataSize()));
+                    .append(format("CPU: %s, Input: %s (%s); per task: avg.: %s std.dev.: %s, Output: %s (%s)",
+                            stageStats.getTotalCpuTime(),
+                            formatPositions(stageStats.getProcessedInputPositions()),
+                            stageStats.getProcessedInputDataSize(),
+                            avgPositionsPerTask,
+                            sdAmongTasks,
+                            formatPositions(stageStats.getOutputPositions()),
+                            stageStats.getOutputDataSize()));
+            if (isNonZero(stageStats.getSpilledDataSize())) {
+                builder.append(", Spilled " + stageStats.getSpilledDataSize());
+            }
+            builder.append("\n");
         }
 
         PartitioningScheme partitioningScheme = fragment.getPartitioningScheme();
@@ -283,7 +294,7 @@ public class PlanPrinter
                     formatHash(partitioningScheme.getHashColumn())));
         }
 
-        if (stageStats.isPresent()) {
+        if (stageInfo.isPresent()) {
             builder.append(textLogicalPlan(fragment.getRoot(), fragment.getSymbols(), metadata, lookup, session, planNodeStats.get(), 1, verbose))
                     .append("\n");
         }
