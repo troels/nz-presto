@@ -82,6 +82,12 @@ public class SpnegoFilter
         try {
             String hostname = InetAddress.getLocalHost().getCanonicalHostName().toLowerCase(Locale.US);
             String servicePrincipal = config.getServiceName() + "/" + hostname;
+            String fullPrincipal;
+            if (config.getRealm() != null) {
+                fullPrincipal = servicePrincipal + "@" + config.getRealm();
+            } else {
+                fullPrincipal = servicePrincipal;
+            }
             loginContext = new LoginContext("", null, null, new Configuration()
             {
                 @Override
@@ -98,7 +104,7 @@ public class SpnegoFilter
                     }
                     options.put("isInitiator", "false");
                     options.put("useKeyTab", "true");
-                    options.put("principal", servicePrincipal);
+                    options.put("principal", fullPrincipal);
                     options.put("storeKey", "true");
 
                     return new AppConfigurationEntry[] {new AppConfigurationEntry(Krb5LoginModule.class.getName(), REQUIRED, options)};
@@ -106,8 +112,15 @@ public class SpnegoFilter
             });
             loginContext.login();
 
+            GSSName name;
+            try {
+                name = gssManager.createName(fullPrincipal, GSSName.NT_USER_NAME);
+            } catch (GSSException e) {
+                throw Throwables.propagate((e));
+            }
+
             serverCredential = doAs(loginContext.getSubject(), () -> gssManager.createCredential(
-                    gssManager.createName(config.getServiceName() + "@" + hostname, GSSName.NT_HOSTBASED_SERVICE),
+                    name,
                     INDEFINITE_LIFETIME,
                     new Oid[] {
                             new Oid("1.2.840.113554.1.2.2"), // kerberos 5

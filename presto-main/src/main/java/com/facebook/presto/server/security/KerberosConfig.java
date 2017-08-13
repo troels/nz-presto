@@ -24,6 +24,7 @@ public class KerberosConfig
     private File kerberosConfig;
     private String serviceName;
     private File keytab;
+    private String realm;
 
     @NotNull
     public File getKerberosConfig()
@@ -60,6 +61,17 @@ public class KerberosConfig
     public KerberosConfig setKeytab(File keytab)
     {
         this.keytab = keytab;
+        return this;
+    }
+
+
+    public String getRealm() {
+        return realm;
+    }
+
+    @Config("http.server.authentication.krb5.realm")
+    public KerberosConfig setRealm(String realm) {
+        this.realm = realm;
         return this;
     }
 }
