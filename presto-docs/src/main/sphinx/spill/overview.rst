@@ -44,6 +44,23 @@ memory intensive queries. It is still possible that the query runner will fail
 to divide intermediate data into chunks small enough that every chunk fits into
 memory, leading to `Out of memory` errors while loading the data from disk.
 
+Spill disk space
+----------------
+
+Spilling intermediate results to disk and retrieving them back is expensive
+in terms of IO operations. Thus, queries that use spill likely become
+throttled by disk. To increase query performance it is recommended to
+provide multiple paths on separate local devices for spill (property
+``spiller-spill-path`` in :ref:`tuning-spilling`).
+
+Do not spill to the system drive, especially not to the drive where the JVM
+is running and writing logs. Doing so may lead to cluster instability. Additionally,
+it is recommended to monitor the disk saturation of the configured spill paths.
+
+Presto treats spill paths as independent disks (see `JBOD
+<https://en.wikipedia.org/wiki/Non-RAID_drive_architectures#JBOD>`_), so
+there is no need to use RAID matrices for spill.
+
 Supported operations
 ------------------------
 
