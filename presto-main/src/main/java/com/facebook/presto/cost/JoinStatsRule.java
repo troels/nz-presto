@@ -40,10 +40,12 @@ import static com.facebook.presto.util.MoreMath.rangeMin;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.Sets.difference;
+import static com.google.common.collect.Sets.filter;
 import static java.lang.Double.NaN;
 import static java.lang.Double.isNaN;
 import static java.lang.Math.min;
 import static java.util.Comparator.comparingDouble;
+import static java.util.Objects.requireNonNull;
 
 public class JoinStatsRule
         implements ComposableStatsCalculator.Rule
@@ -54,7 +56,7 @@ public class JoinStatsRule
 
     public JoinStatsRule(FilterStatsCalculator filterStatsCalculator)
     {
-        this.filterStatsCalculator = filterStatsCalculator;
+        this.filterStatsCalculator = requireNonNull(filterStatsCalculator, "filterStatsCalculator can not be null");
     }
 
     @Override
