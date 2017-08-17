@@ -26,6 +26,7 @@ import com.facebook.presto.sql.planner.plan.PlanNodeId;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -102,6 +103,14 @@ public class StatsCalculatorAssertion
     {
         PlanNodeStatsEstimate statsEstimate = statsCalculator.calculateStats(planNode, mockLookup(), session, types);
         statisticsAssertionConsumer.accept(PlanNodeStatsAssertion.assertThat(statsEstimate));
+        return this;
+    }
+
+    public StatsCalculatorAssertion check(ComposableStatsCalculator.Rule rule, Consumer<PlanNodeStatsAssertion> statisticsAssertionConsumer)
+    {
+        Optional<PlanNodeStatsEstimate> statsEstimate = rule.calculate(planNode, mockLookup(), session, types);
+        checkState(statsEstimate.isPresent(), "Expected stats estimates to be present");
+        statisticsAssertionConsumer.accept(PlanNodeStatsAssertion.assertThat(statsEstimate.get()));
         return this;
     }
 
