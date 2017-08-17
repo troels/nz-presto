@@ -46,7 +46,7 @@ public class TpcdsRecordSetProvider
     private RecordSet getRecordSet(
             Table table,
             List<? extends ColumnHandle> columns,
-            int scaleFactor,
+            double scaleFactor,
             int partNumber,
             int totalParts,
             boolean noSexism)

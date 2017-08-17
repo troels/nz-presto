@@ -86,7 +86,7 @@ public class TpcdsMetadata
         }
 
         // parse the scale factor
-        int scaleFactor = schemaNameToScaleFactor(tableName.getSchemaName());
+        double scaleFactor = schemaNameToScaleFactor(tableName.getSchemaName());
         if (scaleFactor < 0) {
             return null;
         }
@@ -218,19 +218,19 @@ public class TpcdsMetadata
         return ImmutableList.of();
     }
 
-    private static String scaleFactorSchemaName(int scaleFactor)
+    private static String scaleFactorSchemaName(double scaleFactor)
     {
         return "sf" + scaleFactor;
     }
 
-    public static int schemaNameToScaleFactor(String schemaName)
+    public static double schemaNameToScaleFactor(String schemaName)
     {
         if (!schemaName.startsWith("sf")) {
             return -1;
         }
 
         try {
-            return Integer.parseInt(schemaName.substring(2));
+            return Double.parseDouble(schemaName.substring(2));
         }
         catch (Exception ignored) {
             return -1;

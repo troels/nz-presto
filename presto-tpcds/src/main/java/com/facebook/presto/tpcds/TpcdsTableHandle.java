@@ -26,10 +26,10 @@ public class TpcdsTableHandle
         implements ConnectorTableHandle
 {
     private final String tableName;
-    private final int scaleFactor;
+    private final double scaleFactor;
 
     @JsonCreator
-    public TpcdsTableHandle(@JsonProperty("tableName") String tableName, @JsonProperty("scaleFactor") int scaleFactor)
+    public TpcdsTableHandle(@JsonProperty("tableName") String tableName, @JsonProperty("scaleFactor") double scaleFactor)
     {
         this.tableName = requireNonNull(tableName, "tableName is null");
         checkState(scaleFactor > 0, "scaleFactor is negative");
@@ -43,7 +43,7 @@ public class TpcdsTableHandle
     }
 
     @JsonProperty
-    public int getScaleFactor()
+    public double getScaleFactor()
     {
         return scaleFactor;
     }
