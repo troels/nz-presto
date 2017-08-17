@@ -29,6 +29,7 @@ import static com.facebook.presto.tests.statistics.MetricComparisonStrategies.de
 import static com.facebook.presto.tests.statistics.MetricComparisonStrategies.relativeError;
 import static com.facebook.presto.tests.statistics.Metrics.OUTPUT_ROW_COUNT;
 import static com.facebook.presto.tpch.TpchMetadata.TINY_SCHEMA_NAME;
+import static com.google.common.collect.Range.closed;
 
 public class TestTpchLocalStats
 {
@@ -236,5 +237,21 @@ public class TestTpchLocalStats
         statisticsAssertion.check("select * from orders where o_orderdate >= DATE '1993-10-01' AND o_orderdate < DATE '1993-10-01' + INTERVAL '3' MONTH",
                 checks -> checks
                         .estimate(OUTPUT_ROW_COUNT, defaultTolerance()));
+    }
+
+    @Test
+    public void testInSubquery() {
+        statisticsAssertion.check("select * from lineitem where l_orderkey in (select o_orderkey from orders where o_orderdate >= DATE '1993-10-01')",
+                checks -> checks
+                        .estimate(OUTPUT_ROW_COUNT, defaultTolerance()));
+    }
+
+    @Test
+    public void testNotInSubquery() {
+        statisticsAssertion.check("select * from lineitem where l_orderkey not in (select o_orderkey from orders where o_orderdate >= DATE '1993-10-01')",
+                checks -> checks
+                        .estimate(OUTPUT_ROW_COUNT, relativeError(closed(0.0, 1.0))));
+        // we allow overestimating here. That is because safety heuristic for antijoin which enforces that not more that 50%
+        // of values are filtered out.
     }
 }
