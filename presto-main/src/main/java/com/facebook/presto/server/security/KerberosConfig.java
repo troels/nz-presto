@@ -18,6 +18,10 @@ import io.airlift.configuration.Config;
 import javax.validation.constraints.NotNull;
 
 import java.io.File;
+import java.util.List;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class KerberosConfig
 {
@@ -25,6 +29,8 @@ public class KerberosConfig
     private String serviceName;
     private File keytab;
     private String realm;
+    private List<String> principals;
+    private List<String> keytabs;
 
     @NotNull
     public File getKerberosConfig()
@@ -73,5 +79,25 @@ public class KerberosConfig
     public KerberosConfig setRealm(String realm) {
         this.realm = realm;
         return this;
+    }
+
+    @Config("http.server.authentication.principals")
+    public KerberosConfig setPrincipals(String principals) {
+        this.principals = Stream.of(principals.split(",")).map(String::trim).filter((x) -> !x.isEmpty()).collect(Collectors.toList());
+        return this;
+    }
+
+    public List<String> getPrincipals() {
+        return principals;
+    }
+
+    @Config("http.server.authentication.keytabs")
+    public KerberosConfig setKeytabs(String keytabs) {
+        this.keytabs = Stream.of(keytabs.split(",")).map(String::trim).filter((x) -> !x.isEmpty()).collect(Collectors.toList());
+        return this;
+    }
+
+    public List<String> getKeytabs() {
+        return keytabs;
     }
 }
