@@ -259,16 +259,14 @@ public class TestTpchLocalStats
     }
 
     @Test
-    public void testInSubquery()
-    {
+    public void testInSubquery() {
         statisticsAssertion.check("select * from lineitem where l_orderkey in (select o_orderkey from orders where o_orderdate >= DATE '1993-10-01')",
                 checks -> checks
                         .estimate(OUTPUT_ROW_COUNT, defaultTolerance()));
     }
 
     @Test
-    public void testNotInSubquery()
-    {
+    public void testNotInSubquery() {
         statisticsAssertion.check("select * from lineitem where l_orderkey not in (select o_orderkey from orders where o_orderdate >= DATE '1993-10-01')",
                 checks -> checks
                         .estimate(OUTPUT_ROW_COUNT, relativeError(closed(0.0, 1.0))));
