@@ -20,9 +20,7 @@ import com.facebook.presto.sql.planner.PlanNodeIdAllocator;
 import com.facebook.presto.sql.planner.Symbol;
 import com.facebook.presto.sql.planner.iterative.Lookup;
 import com.facebook.presto.sql.planner.iterative.rule.test.PlanBuilder;
-import com.facebook.presto.sql.planner.optimizations.PlanNodeSearcher;
 import com.facebook.presto.sql.planner.plan.PlanNode;
-import com.facebook.presto.sql.planner.plan.PlanNodeId;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -89,13 +87,6 @@ public class StatsCalculatorAssertion
         checkPlanNodeSet();
         checkArgument(sourceIndex < planNode.getSources().size(), "invalid sourceIndex %s; planNode has %s sources", sourceIndex, planNode.getSources().size());
         sourcesStats.put(planNode.getSources().get(sourceIndex), sourceStats);
-        return this;
-    }
-
-    public StatsCalculatorAssertion withSourceStats(PlanNodeId planNodeId, PlanNodeStatsEstimate sourceStats)
-    {
-        PlanNode sourceNode = PlanNodeSearcher.searchFrom(planNode).where(node -> node.getId().equals(planNodeId)).findOnlyElement();
-        sourcesStats.put(sourceNode, sourceStats);
         return this;
     }
 
