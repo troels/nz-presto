@@ -13,7 +13,6 @@
  */
 package com.facebook.presto.hive.orc;
 
-import com.facebook.presto.hive.FileFormatDataSourceStats;
 import com.facebook.presto.hive.HiveColumnHandle;
 import com.facebook.presto.orc.OrcCorruptionException;
 import com.facebook.presto.orc.OrcDataSource;
@@ -61,22 +60,17 @@ public class OrcPageSource
 
     private final AggregatedMemoryContext systemMemoryContext;
 
-    private final FileFormatDataSourceStats stats;
-
     public OrcPageSource(
             OrcRecordReader recordReader,
             OrcDataSource orcDataSource,
             List<HiveColumnHandle> columns,
             TypeManager typeManager,
-            AggregatedMemoryContext systemMemoryContext,
-            FileFormatDataSourceStats stats)
+            AggregatedMemoryContext systemMemoryContext)
     {
         this.recordReader = requireNonNull(recordReader, "recordReader is null");
         this.orcDataSource = requireNonNull(orcDataSource, "orcDataSource is null");
 
         int size = requireNonNull(columns, "columns is null").size();
-
-        this.stats = requireNonNull(stats, "stats is null");
 
         this.constantBlocks = new Block[size];
         this.hiveColumnIndexes = new int[size];
@@ -151,7 +145,7 @@ public class OrcPageSource
                     blocks[fieldId] = constantBlocks[fieldId].getRegion(0, batchSize);
                 }
                 else {
-                    blocks[fieldId] = new LazyBlock(batchSize, new OrcBlockLoader(hiveColumnIndexes[fieldId], type, stats));
+                    blocks[fieldId] = new LazyBlock(batchSize, new OrcBlockLoader(hiveColumnIndexes[fieldId], type));
                 }
             }
             return new Page(batchSize, blocks);
@@ -218,14 +212,12 @@ public class OrcPageSource
         private final int expectedBatchId = batchId;
         private final int columnIndex;
         private final Type type;
-        private final FileFormatDataSourceStats stats;
         private boolean loaded;
 
-        public OrcBlockLoader(int columnIndex, Type type, FileFormatDataSourceStats stats)
+        public OrcBlockLoader(int columnIndex, Type type)
         {
             this.columnIndex = columnIndex;
             this.type = requireNonNull(type, "type is null");
-            this.stats = requireNonNull(stats, "stats is null");
         }
 
         @Override
@@ -247,8 +239,6 @@ public class OrcPageSource
                 }
                 throw new PrestoException(HIVE_CURSOR_ERROR, e);
             }
-
-            stats.addLoadedBlockSize(lazyBlock.getSizeInBytes());
 
             loaded = true;
         }
