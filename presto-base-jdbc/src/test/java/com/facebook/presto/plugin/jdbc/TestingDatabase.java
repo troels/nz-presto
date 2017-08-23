@@ -16,6 +16,7 @@ package com.facebook.presto.plugin.jdbc;
 import com.facebook.presto.spi.ConnectorSplitSource;
 import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.predicate.TupleDomain;
+import com.facebook.presto.type.TypeRegistry;
 import com.google.common.collect.ImmutableMap;
 import org.h2.Driver;
 
@@ -43,6 +44,7 @@ final class TestingDatabase
         String connectionUrl = "jdbc:h2:mem:test" + System.nanoTime();
         jdbcClient = new BaseJdbcClient(
                 new JdbcConnectorId(CONNECTOR_ID),
+                new TypeRegistry(),
                 new BaseJdbcConfig().setConnectionUrl(connectionUrl),
                 "\"",
                 new Driver());

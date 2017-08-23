@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.plugin.jdbc;
 
+import com.facebook.presto.spi.type.TypeManager;
 import com.google.inject.Binder;
 import com.google.inject.Module;
 import com.google.inject.Scopes;
@@ -24,10 +25,12 @@ public class JdbcModule
         implements Module
 {
     private final String connectorId;
+    private final TypeManager typeManager;
 
-    public JdbcModule(String connectorId)
+    public JdbcModule(String connectorId, TypeManager typeManager)
     {
         this.connectorId = requireNonNull(connectorId, "connector id is null");
+        this.typeManager = requireNonNull(typeManager, "typeManager is null");
     }
 
     @Override
@@ -39,6 +42,7 @@ public class JdbcModule
         binder.bind(JdbcRecordSetProvider.class).in(Scopes.SINGLETON);
         binder.bind(JdbcRecordSinkProvider.class).in(Scopes.SINGLETON);
         binder.bind(JdbcConnector.class).in(Scopes.SINGLETON);
+        binder.bind(TypeManager.class).toInstance(typeManager);
         configBinder(binder).bindConfig(JdbcMetadataConfig.class);
     }
 }

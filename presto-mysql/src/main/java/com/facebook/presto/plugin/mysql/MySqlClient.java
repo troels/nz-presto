@@ -18,6 +18,7 @@ import com.facebook.presto.plugin.jdbc.BaseJdbcConfig;
 import com.facebook.presto.plugin.jdbc.JdbcConnectorId;
 import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.type.Type;
+import com.facebook.presto.spi.type.TypeManager;
 import com.facebook.presto.spi.type.VarcharType;
 import com.facebook.presto.spi.type.Varchars;
 import com.google.common.base.Throwables;
@@ -40,10 +41,10 @@ public class MySqlClient
         extends BaseJdbcClient
 {
     @Inject
-    public MySqlClient(JdbcConnectorId connectorId, BaseJdbcConfig config, MySqlConfig mySqlConfig)
+    public MySqlClient(JdbcConnectorId connectorId, TypeManager typeManager, BaseJdbcConfig config, MySqlConfig mySqlConfig)
             throws SQLException
     {
-        super(connectorId, config, "`", new Driver());
+        super(connectorId, typeManager, config, "`", new Driver());
         connectionProperties.setProperty("nullCatalogMeansCurrent", "false");
         connectionProperties.setProperty("useUnicode", "true");
         connectionProperties.setProperty("characterEncoding", "utf8");

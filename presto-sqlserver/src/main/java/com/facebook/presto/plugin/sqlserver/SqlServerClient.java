@@ -18,6 +18,7 @@ import com.facebook.presto.plugin.jdbc.BaseJdbcConfig;
 import com.facebook.presto.plugin.jdbc.JdbcConnectorId;
 import com.facebook.presto.plugin.jdbc.JdbcOutputTableHandle;
 import com.facebook.presto.spi.PrestoException;
+import com.facebook.presto.spi.type.TypeManager;
 import com.microsoft.sqlserver.jdbc.SQLServerDriver;
 
 import javax.inject.Inject;
@@ -31,10 +32,10 @@ public class SqlServerClient
         extends BaseJdbcClient
 {
     @Inject
-    public SqlServerClient(JdbcConnectorId connectorId, BaseJdbcConfig config)
+    public SqlServerClient(JdbcConnectorId connectorId, TypeManager typeManager, BaseJdbcConfig config)
             throws SQLException
     {
-        super(connectorId, config, "\"", new SQLServerDriver());
+        super(connectorId, typeManager, config, "\"", new SQLServerDriver());
     }
 
     @Override

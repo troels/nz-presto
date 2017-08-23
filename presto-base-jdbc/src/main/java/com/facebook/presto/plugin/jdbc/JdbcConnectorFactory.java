@@ -62,7 +62,7 @@ public class JdbcConnectorFactory
         requireNonNull(requiredConfig, "requiredConfig is null");
 
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            Bootstrap app = new Bootstrap(new JdbcModule(connectorId), module);
+            Bootstrap app = new Bootstrap(new JdbcModule(connectorId, context.getTypeManager()), module);
 
             Injector injector = app
                     .strictConfig()

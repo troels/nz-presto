@@ -22,6 +22,7 @@ import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.TableNotFoundException;
 import com.facebook.presto.spi.type.CharType;
 import com.facebook.presto.spi.type.Type;
+import com.facebook.presto.spi.type.TypeManager;
 import com.facebook.presto.spi.type.VarcharType;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
@@ -101,12 +102,14 @@ public class BaseJdbcClient
     protected final String connectionUrl;
     protected final Properties connectionProperties;
     protected final String identifierQuote;
+    protected final TypeManager typeManager;
 
-    public BaseJdbcClient(JdbcConnectorId connectorId, BaseJdbcConfig config, String identifierQuote, Driver driver)
+    public BaseJdbcClient(JdbcConnectorId connectorId, TypeManager typeManager, BaseJdbcConfig config, String identifierQuote, Driver driver)
     {
         this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
         this.identifierQuote = requireNonNull(identifierQuote, "identifierQuote is null");
         this.driver = requireNonNull(driver, "driver is null");
+        this.typeManager = requireNonNull(typeManager, "typeManager is null");
 
         requireNonNull(config, "config is null");
         connectionUrl = config.getConnectionUrl();
@@ -206,7 +209,10 @@ public class BaseJdbcClient
                 boolean found = false;
                 while (resultSet.next()) {
                     found = true;
-                    Type columnType = toPrestoType(resultSet.getInt("DATA_TYPE"), resultSet.getInt("COLUMN_SIZE"));
+                    Type columnType = toPrestoType(
+                            resultSet.getInt("DATA_TYPE"),
+                            resultSet.getInt("COLUMN_SIZE"),
+                            resultSet.getString("TYPE_NAME"));
                     // skip unsupported column types
                     if (columnType != null) {
                         String columnName = resultSet.getString("COLUMN_NAME");
@@ -434,6 +440,12 @@ public class BaseJdbcClient
         return connection.prepareStatement(sql);
     }
 
+    @Override
+    public JdbcResultSetReader getJdbcResultSetReader()
+    {
+        return new BaseJdbcResultSetReader(typeManager);
+    }
+
     protected ResultSet getTables(Connection connection, String schemaName, String tableName)
             throws SQLException
     {
@@ -463,7 +475,7 @@ public class BaseJdbcClient
         }
     }
 
-    protected Type toPrestoType(int jdbcType, int columnSize)
+    protected Type toPrestoType(int jdbcType, int columnSize, String typeName)
     {
         switch (jdbcType) {
             case Types.BIT:
