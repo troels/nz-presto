@@ -290,8 +290,6 @@ public class ScanFilterAndProjectOperator
             if (finishing) {
                 mergingOutput.finish();
             }
-
-            pageBuilderMemoryContext.setBytes(mergingOutput.getRetainedSizeInBytes());
         }
 
         Page result = mergingOutput.getOutput();
