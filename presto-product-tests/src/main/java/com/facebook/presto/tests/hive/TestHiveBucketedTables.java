@@ -22,6 +22,7 @@ import com.teradata.tempto.fulfillment.table.MutableTableRequirement;
 import com.teradata.tempto.fulfillment.table.TableDefinitionsRepository;
 import com.teradata.tempto.fulfillment.table.hive.HiveTableDefinition;
 import com.teradata.tempto.query.QueryExecutionException;
+import com.teradata.tempto.query.QueryExecutor;
 import org.testng.annotations.Test;
 
 import java.sql.SQLException;
@@ -34,6 +35,7 @@ import static com.facebook.presto.tests.utils.QueryExecutors.onHive;
 import static com.facebook.presto.tests.utils.TableDefinitionUtils.mutableTableInstanceOf;
 import static com.teradata.tempto.assertions.QueryAssert.Row.row;
 import static com.teradata.tempto.assertions.QueryAssert.assertThat;
+import static com.teradata.tempto.context.ThreadLocalTestContextHolder.testContext;
 import static com.teradata.tempto.fulfillment.table.MutableTableRequirement.State.CREATED;
 import static com.teradata.tempto.fulfillment.table.TableRequirements.immutableTable;
 import static com.teradata.tempto.fulfillment.table.hive.tpch.TpchTableDefinitions.NATION;
@@ -195,6 +197,20 @@ public class TestHiveBucketedTables
         enableEmptyBucketedPartitions();
         assertThat(query(format("SELECT count(*) FROM %s", tableName)))
                 .containsExactly(row(0));
+    }
+
+    @Test(groups = {HIVE_CONNECTOR})
+    public void testIgnorePartitionBucketingIfNotBucketed()
+            throws SQLException
+    {
+        String tableName = mutableTableInstanceOf(BUCKETED_PARTITIONED_NATION).getNameInDatabase();
+        populateDataToHiveTable(tableName, NATION.getName(), Optional.of("part_key = 'insert_1'"));
+        populateDataToHiveTable(tableName, NATION.getName(), Optional.of("part_key = 'insert_2'"));
+
+        testContext().getDependency(QueryExecutor.class, "hive").executeQuery(format("ALTER TABLE %s NOT CLUSTERED", tableName));
+
+        assertThat(query(format("SELECT count(*) FROM %s WHERE n_nationkey = 1", tableName)))
+                .containsExactly(row(2));
     }
 
     private static void enableMultiFileBucketing()
