@@ -40,6 +40,7 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.facebook.presto.hive.HiveErrorCode.HIVE_METASTORE_ERROR;
 import static com.facebook.presto.hive.HiveUtil.toPartitionValues;
@@ -496,6 +497,16 @@ public class TestingHiveMetastore
     {
         SchemaTableName schemaTableName = new SchemaTableName(databaseName, tableName);
         return Optional.ofNullable(relations.get(schemaTableName));
+    }
+
+    @Override
+    public List<Table> getTablesByName(String databaseName, List<String> tableNames)
+    {
+        return tableNames.stream()
+                  .map(name -> getTable(databaseName, name))
+                  .filter(Optional::isPresent)
+                  .map(Optional::get)
+                  .collect(Collectors.toList());
     }
 
     @Override

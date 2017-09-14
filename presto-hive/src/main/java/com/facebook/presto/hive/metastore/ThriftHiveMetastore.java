@@ -223,6 +223,37 @@ public class ThriftHiveMetastore
     }
 
     @Override
+    public List<Table> getTablesByName(String databaseName, List<String> tableNames)
+    {
+        try {
+            return retry()
+                    .stopOn(NoSuchObjectException.class, HiveViewNotSupportedException.class)
+                    .stopOnIllegalExceptions()
+                    .run("getTable", stats.getGetTable().wrap(() -> {
+                        try (HiveMetastoreClient client = clientProvider.createMetastoreClient()) {
+                            List<org.apache.hadoop.hive.metastore.api.Table> tables = client.getTablesByName(databaseName, tableNames);
+                            ImmutableList.Builder<org.apache.hadoop.hive.metastore.api.Table> outTables = ImmutableList.builder();
+                            for (org.apache.hadoop.hive.metastore.api.Table table : tables) {
+                                if (!table.getTableType().equals(TableType.VIRTUAL_VIEW.name()) || isPrestoView(table)) {
+                                    outTables.add(table);
+                                }
+                            }
+                            return outTables.build();
+                        }
+                    }));
+        }
+        catch (NoSuchObjectException e) {
+            return ImmutableList.of();
+        }
+        catch (TException e) {
+            throw new PrestoException(HIVE_METASTORE_ERROR, e);
+        }
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
     public Optional<Set<ColumnStatisticsObj>> getTableColumnStatistics(String databaseName, String tableName, Set<String> columnNames)
     {
         try {

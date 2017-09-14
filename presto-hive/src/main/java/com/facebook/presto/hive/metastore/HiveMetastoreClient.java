@@ -68,6 +68,9 @@ public interface HiveMetastoreClient
     Table getTable(String databaseName, String tableName)
             throws TException;
 
+    List<Table> getTablesByName(String databaseName, List<String> tableNames)
+        throws TException;
+
     List<ColumnStatisticsObj> getTableColumnStatistics(String databaseName, String tableName, List<String> columnNames)
             throws TException;
 

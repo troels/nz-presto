@@ -25,6 +25,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.ExecutionError;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.airlift.units.Duration;
@@ -43,7 +44,6 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -55,8 +55,10 @@ import static com.google.common.collect.Iterables.transform;
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 
 /**
  * Hive Metastore Cache
@@ -189,10 +191,17 @@ public class CachingHiveMetastore
                 .build(asyncReloading(new CacheLoader<HiveTableName, Optional<Table>>()
                 {
                     @Override
-                    public Optional<Table> load(HiveTableName hiveTableName)
+                    public Optional<Table> load(HiveTableName key)
                             throws Exception
                     {
-                        return loadTable(hiveTableName);
+                        return loadTable(key);
+                    }
+
+                    @Override
+                    public Map<HiveTableName, Optional<Table>> loadAll(Iterable<? extends HiveTableName> keys)
+                            throws Exception
+                    {
+                        return loadTables(keys);
                     }
                 }, executor));
 
@@ -281,6 +290,34 @@ public class CachingHiveMetastore
                 }, executor));
     }
 
+    private Map<HiveTableName, Optional<Table>> loadTables(Iterable<? extends HiveTableName> keys)
+    {
+        Map<String, List<HiveTableName>> grouped =
+                Streams.stream(keys)
+                        .collect(groupingBy(HiveTableName::getDatabaseName));
+
+        Map<String, Map<String, List<Table>>> fetchedTables = grouped.entrySet().stream()
+                .map(entry -> loadTablesByName(
+                        entry.getKey(),
+                        entry.getValue().stream()
+                                .map(HiveTableName::getTableName)
+                                .collect(toList())))
+                .flatMap(List::stream)
+                .collect(groupingBy(Table::getDatabaseName,
+                        groupingBy(Table::getTableName)));
+
+        return Streams
+                .stream(keys)
+                .collect(toMap(
+                        tableName -> tableName,
+                        tableName ->
+                                Optional
+                                        .ofNullable(fetchedTables.get(tableName.getDatabaseName()))
+                                        .map(tables -> tables.get(tableName.getTableName()))
+                                        .map(tables -> tables.get(0))
+                ));
+    }
+
     @Managed
     public void flushCache()
     {
@@ -346,10 +383,30 @@ public class CachingHiveMetastore
         return get(tableCache, HiveTableName.table(databaseName, tableName));
     }
 
+    @Override
+    public List<Table> getTablesByName(String databaseName, List<String> tableNames)
+    {
+        return getAll(tableCache,
+                      tableNames
+                              .stream()
+                              .map(name -> HiveTableName.table(databaseName, name))
+                              .collect(toList()))
+                .values()
+                .stream()
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(toList());
+    }
+
     private Optional<Table> loadTable(HiveTableName hiveTableName)
             throws Exception
     {
         return delegate.getTable(hiveTableName.getDatabaseName(), hiveTableName.getTableName());
+    }
+
+    private List<Table> loadTablesByName(String databaseName, List<String> tableNames)
+    {
+        return delegate.getTablesByName(databaseName, tableNames);
     }
 
     @Override
@@ -378,7 +435,7 @@ public class CachingHiveMetastore
         HiveTableName hiveTableName = stream(keys).findFirst().get().getHiveTableName();
         checkArgument(stream(keys).allMatch(key -> key.getHiveTableName().equals(hiveTableName)), "all keys must relate to same hive table");
 
-        Set<String> columnNames = stream(keys).map(TableColumnStatisticsCacheKey::getColumnName).collect(Collectors.toSet());
+        Set<String> columnNames = stream(keys).map(TableColumnStatisticsCacheKey::getColumnName).collect(toSet());
 
         Optional<Map<String, HiveColumnStatistics>> columnStatistics = delegate.getTableColumnStatistics(hiveTableName.getDatabaseName(), hiveTableName.getTableName(), columnNames);
 
@@ -426,8 +483,8 @@ public class CachingHiveMetastore
         PartitionColumnStatisticsCacheKey firstKey = Iterables.getFirst(keys, null);
         HiveTableName hiveTableName = firstKey.getHivePartitionName().getHiveTableName();
         checkArgument(stream(keys).allMatch(key -> key.getHivePartitionName().getHiveTableName().equals(hiveTableName)), "all keys must relate to same hive table");
-        Set<String> partitionNames = stream(keys).map(key -> key.getHivePartitionName().getPartitionName()).collect(Collectors.toSet());
-        Set<String> columnNames = stream(keys).map(PartitionColumnStatisticsCacheKey::getColumnName).collect(Collectors.toSet());
+        Set<String> partitionNames = stream(keys).map(key -> key.getHivePartitionName().getPartitionName()).collect(toSet());
+        Set<String> columnNames = stream(keys).map(PartitionColumnStatisticsCacheKey::getColumnName).collect(toSet());
 
         Optional<Map<String, Map<String, HiveColumnStatistics>>> columnStatistics = delegate.getPartitionColumnStatistics(
                 hiveTableName.getDatabaseName(),

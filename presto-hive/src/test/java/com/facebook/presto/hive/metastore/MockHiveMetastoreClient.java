@@ -141,6 +141,17 @@ public class MockHiveMetastoreClient
     }
 
     @Override
+    public List<Table> getTablesByName(String databaseName, List<String> tableNames)
+            throws TException
+    {
+        ImmutableList.Builder<Table> builder = ImmutableList.builder();
+        for (String tableName : tableNames) {
+            builder.add(getTable(databaseName, tableName));
+        }
+        return builder.build();
+    }
+
+    @Override
     public List<ColumnStatisticsObj> getTableColumnStatistics(String databaseName, String tableName, List<String> columnNames)
             throws TException
     {

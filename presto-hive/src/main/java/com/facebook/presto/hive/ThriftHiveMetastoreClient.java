@@ -146,6 +146,13 @@ public class ThriftHiveMetastoreClient
     }
 
     @Override
+    public List<Table> getTablesByName(String databaseName, List<String> tableNames)
+            throws TException
+    {
+        return client.get_table_objects_by_name(databaseName, tableNames);
+    }
+
+    @Override
     public List<ColumnStatisticsObj> getTableColumnStatistics(String databaseName, String tableName, List<String> columnNames)
             throws TException
     {
