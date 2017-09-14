@@ -25,6 +25,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.ExecutionError;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.airlift.units.Duration;
@@ -189,10 +190,40 @@ public class CachingHiveMetastore
                 .build(asyncReloading(new CacheLoader<HiveTableName, Optional<Table>>()
                 {
                     @Override
-                    public Optional<Table> load(HiveTableName hiveTableName)
+                    public Optional<Table> load(HiveTableName key)
                             throws Exception
                     {
-                        return loadTable(hiveTableName);
+                        return loadTable(key);
+                    }
+
+                    @Override
+                    public Map<HiveTableName, Optional<Table>> loadAll(Iterable<? extends HiveTableName> keys)
+                            throws Exception
+                    {
+                        Map<String, List<HiveTableName>> grouped =
+                                Streams.stream(keys)
+                                       .collect(Collectors.groupingBy(HiveTableName::getDatabaseName));
+
+                        Map<String, Map<String, List<Table>>> fetchedTables = grouped.entrySet().stream()
+                                .map(entry -> loadTablesByName(
+                                        entry.getKey(),
+                                        entry.getValue().stream()
+                                                .map(HiveTableName::getTableName)
+                                                .collect(Collectors.toList())))
+                                .flatMap(List::stream)
+                                .collect(Collectors.groupingBy(Table::getDatabaseName,
+                                                               Collectors.groupingBy(Table::getTableName)));
+
+                        return Streams
+                                .stream(keys)
+                                .collect(Collectors.toMap(
+                                        tableName -> tableName,
+                                        tableName ->
+                                                Optional
+                                                        .ofNullable(fetchedTables.get(tableName.getDatabaseName()))
+                                                        .map(tables -> tables.get(tableName.getTableName()))
+                                                        .map(tables -> tables.get(0))
+                                ));
                     }
                 }, executor));
 
@@ -346,10 +377,30 @@ public class CachingHiveMetastore
         return get(tableCache, HiveTableName.table(databaseName, tableName));
     }
 
+    @Override
+    public List<Table> getTablesByName(String databaseName, List<String> tableNames)
+    {
+        return getAll(tableCache,
+                      tableNames
+                              .stream()
+                              .map(name -> HiveTableName.table(databaseName, name))
+                              .collect(Collectors.toList()))
+                .values()
+                .stream()
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toList());
+    }
+
     private Optional<Table> loadTable(HiveTableName hiveTableName)
             throws Exception
     {
         return delegate.getTable(hiveTableName.getDatabaseName(), hiveTableName.getTableName());
+    }
+
+    private List<Table> loadTablesByName(String databaseName, List<String> tableNames)
+    {
+        return delegate.getTablesByName(databaseName, tableNames);
     }
 
     @Override

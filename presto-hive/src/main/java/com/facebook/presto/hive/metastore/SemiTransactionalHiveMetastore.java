@@ -129,6 +129,40 @@ public class SemiTransactionalHiveMetastore
         return delegate.getAllTables(databaseName);
     }
 
+    public synchronized List<Table> getTablesByName(String databaseName, List<String> tableNames)
+    {
+        checkReadable();
+
+        ImmutableList.Builder<String> tablesToFetch = ImmutableList.builder();
+        ImmutableList.Builder<Table> tablesFetched = ImmutableList.builder();
+
+        for (String tableName : tableNames) {
+            Action<TableAndMore> tableAction = tableActions.get(
+                    new SchemaTableName(databaseName, tableName));
+            if (tableAction == null) {
+                tablesToFetch.add(tableName);
+                continue;
+            }
+
+            switch (tableAction.getType()) {
+                case ADD:
+                case ALTER:
+                case INSERT_EXISTING:
+                    tablesFetched.add(tableAction.getData().getTable());
+                    continue;
+                case DROP:
+                    continue;
+                default:
+                    throw new IllegalStateException("Unknown action type");
+            }
+        }
+
+        return ImmutableList.<Table>builder()
+                .addAll(delegate.getTablesByName(databaseName, tablesToFetch.build()))
+                .addAll(tablesFetched.build())
+                .build();
+    }
+
     public synchronized Optional<Table> getTable(String databaseName, String tableName)
     {
         checkReadable();

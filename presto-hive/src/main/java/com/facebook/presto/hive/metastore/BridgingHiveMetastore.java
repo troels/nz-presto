@@ -75,6 +75,15 @@ public class BridgingHiveMetastore
     }
 
     @Override
+    public List<Table> getTablesByName(String databaseName, List<String> tableName)
+    {
+        return delegate.getTablesByName(databaseName, tableName)
+                .stream()
+                .map(MetastoreUtil::fromMetastoreApiTable)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public Optional<Map<String, HiveColumnStatistics>> getTableColumnStatistics(String databaseName, String tableName, Set<String> columnNames)
     {
         return delegate.getTableColumnStatistics(databaseName, tableName, columnNames).map(this::groupStatisticsByColumn);

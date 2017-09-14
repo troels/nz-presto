@@ -189,7 +189,9 @@ public class SpnegoFilter
         for (int i = 0; i < loginContexts.size(); i++) {
             LOG.info("Attempting gss login " + i);
             GSSCredential gssCredential = serverCredentials.get(i);
-            GSSContext context = doAs(loginContexts.get(i).getSubject(), () -> gssManager.createContext(gssCredential));
+            GSSContext context = doAs(
+                    loginContexts.get(i).getSubject(),
+                    () -> gssManager.createContext(gssCredential));
 
             try {
                 byte[] inputToken = Base64.getDecoder().decode(token);

@@ -68,6 +68,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import io.airlift.json.JsonCodec;
+import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.metastore.TableType;
@@ -161,6 +162,8 @@ import static org.apache.hadoop.hive.metastore.TableType.MANAGED_TABLE;
 public class HiveMetadata
         implements ConnectorMetadata
 {
+    private static final Logger log = Logger.get(HiveMetadata.class);
+
     public static final String PRESTO_VERSION_NAME = "presto_version";
     public static final String PRESTO_QUERY_ID_NAME = "presto_query_id";
     public static final String TABLE_COMMENT = "comment";
@@ -260,44 +263,59 @@ public class HiveMetadata
 
     private ConnectorTableMetadata getTableMetadata(SchemaTableName tableName)
     {
-        Optional<Table> table = metastore.getTable(tableName.getSchemaName(), tableName.getTableName());
-        if (!table.isPresent() || table.get().getTableType().equals(TableType.VIRTUAL_VIEW.name())) {
-            throw new TableNotFoundException(tableName);
+        return getTableMetadata(
+                tableName.getSchemaName(),
+                ImmutableList.of(tableName.getTableName())
+        ).get(0);
+    }
+
+    private List<ConnectorTableMetadata> getTableMetadata(String schemaName, List<String> tableNames)
+    {
+        List<Table> tables = metastore.getTablesByName(schemaName, tableNames);
+        ImmutableList.Builder<ConnectorTableMetadata> outputTables = ImmutableList.builder();
+
+        for (Table table : tables) {
+            Function<HiveColumnHandle, ColumnMetadata> metadataGetter = columnMetadataGetter(table, typeManager);
+            ImmutableList.Builder<ColumnMetadata> columns = ImmutableList.builder();
+            for (HiveColumnHandle columnHandle : hiveColumnHandles(connectorId, table)) {
+                columns.add(metadataGetter.apply(columnHandle));
+            }
+            ImmutableMap.Builder<String, Object> properties = ImmutableMap.builder();
+            if (table.getTableType().equals(EXTERNAL_TABLE.name())) {
+                properties.put(EXTERNAL_LOCATION_PROPERTY, table.getStorage().getLocation());
+            }
+            try {
+                    HiveStorageFormat format = extractHiveStorageFormat(table);
+                    properties.put(STORAGE_FORMAT_PROPERTY, format);
+            }
+            catch (PrestoException ignored) {
+                // todo fail if format is not known
+            }
+            catch (IllegalStateException e) {
+                log.warn(e, "Failed to get storage format for table: " + table);
+            }
+
+            List<String> partitionedBy = table.getPartitionColumns().stream()
+                    .map(Column::getName)
+                    .collect(toList());
+            if (!partitionedBy.isEmpty()) {
+                properties.put(PARTITIONED_BY_PROPERTY, partitionedBy);
+            }
+            Optional<HiveBucketProperty> bucketProperty = table.getStorage().getBucketProperty();
+            if (bucketProperty.isPresent()) {
+                properties.put(BUCKET_COUNT_PROPERTY, bucketProperty.get().getBucketCount());
+                properties.put(BUCKETED_BY_PROPERTY, bucketProperty.get().getBucketedBy());
+            }
+            properties.putAll(tableParameterCodec.decode(table.getParameters()));
+
+            Optional<String> comment = Optional.ofNullable(table.getParameters().get(TABLE_COMMENT));
+            outputTables.add(
+                    new ConnectorTableMetadata(
+                            new SchemaTableName(table.getDatabaseName(), table.getTableName()),
+                            columns.build(), properties.build(), comment));
         }
 
-        Function<HiveColumnHandle, ColumnMetadata> metadataGetter = columnMetadataGetter(table.get(), typeManager);
-        ImmutableList.Builder<ColumnMetadata> columns = ImmutableList.builder();
-        for (HiveColumnHandle columnHandle : hiveColumnHandles(connectorId, table.get())) {
-            columns.add(metadataGetter.apply(columnHandle));
-        }
-
-        ImmutableMap.Builder<String, Object> properties = ImmutableMap.builder();
-        if (table.get().getTableType().equals(EXTERNAL_TABLE.name())) {
-            properties.put(EXTERNAL_LOCATION_PROPERTY, table.get().getStorage().getLocation());
-        }
-        try {
-            HiveStorageFormat format = extractHiveStorageFormat(table.get());
-            properties.put(STORAGE_FORMAT_PROPERTY, format);
-        }
-        catch (PrestoException ignored) {
-            // todo fail if format is not known
-        }
-        List<String> partitionedBy = table.get().getPartitionColumns().stream()
-                .map(Column::getName)
-                .collect(toList());
-        if (!partitionedBy.isEmpty()) {
-            properties.put(PARTITIONED_BY_PROPERTY, partitionedBy);
-        }
-        Optional<HiveBucketProperty> bucketProperty = table.get().getStorage().getBucketProperty();
-        if (bucketProperty.isPresent()) {
-            properties.put(BUCKET_COUNT_PROPERTY, bucketProperty.get().getBucketCount());
-            properties.put(BUCKETED_BY_PROPERTY, bucketProperty.get().getBucketedBy());
-        }
-        properties.putAll(tableParameterCodec.decode(table.get().getParameters()));
-
-        Optional<String> comment = Optional.ofNullable(table.get().getParameters().get(TABLE_COMMENT));
-
-        return new ConnectorTableMetadata(tableName, columns.build(), properties.build(), comment);
+        return outputTables.build();
     }
 
     @Override
@@ -354,18 +372,24 @@ public class HiveMetadata
     {
         requireNonNull(prefix, "prefix is null");
         ImmutableMap.Builder<SchemaTableName, List<ColumnMetadata>> columns = ImmutableMap.builder();
-        for (SchemaTableName tableName : listTables(session, prefix)) {
-            try {
-                columns.put(tableName, getTableMetadata(tableName).getColumns());
-            }
-            catch (HiveViewNotSupportedException e) {
-                // view is not supported
-            }
-            catch (TableNotFoundException e) {
-                // table disappeared during listing operation
-            }
-        }
-        return columns.build();
+        Map<String, List<SchemaTableName>> tables = listTables(session, prefix)
+                .stream()
+                .collect(Collectors.groupingBy(SchemaTableName::getSchemaName));
+
+        return tables.entrySet()
+                .stream()
+                .flatMap(entry ->
+                        getTableMetadata(
+                                entry.getKey(),
+                                entry.getValue()
+                                        .stream()
+                                        .map(SchemaTableName::getTableName)
+                                        .collect(Collectors.toList()))
+                                .stream())
+                .collect(
+                        Collectors.toMap(
+                                ConnectorTableMetadata::getTable,
+                                ConnectorTableMetadata::getColumns));
     }
 
     @Override
