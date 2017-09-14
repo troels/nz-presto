@@ -19,6 +19,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import javax.annotation.concurrent.Immutable;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static java.util.Objects.requireNonNull;
@@ -37,8 +38,17 @@ public class QuerySubmission
             @JsonProperty("query") String query,
             @JsonProperty("preparedStatements") Map<String, String> preparedStatements)
     {
-        this.query = requireNonNull(query, "query is null");
-        this.preparedStatements = requireNonNull(preparedStatements, "preparedStatements is null");
+        // Make sure neither query nor preparedstatement ends in semicolon
+        query = requireNonNull(query, "query is null");
+        this.query = query.trim().replaceAll(";+$", "");
+
+        preparedStatements = requireNonNull(preparedStatements, "preparedStatements is null");
+        this.preparedStatements = preparedStatements.entrySet()
+                .stream()
+                .collect(
+                        Collectors.toMap(
+                                entry -> entry.getKey(),
+                                entry -> entry.getValue().trim().replaceAll(";+", "")));
     }
 
     @JsonProperty
