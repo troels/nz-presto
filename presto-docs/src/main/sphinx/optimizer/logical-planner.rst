@@ -2,7 +2,8 @@
 Logical Planner
 ================
 
-Presto currently has a rule based optimizer. A given SQL query goes through syntactic
+Presto currently has a rule based optimizer, with the option to make cost-based join reordering
+(see :doc:`../optimizer/reorder-joins`). A given SQL query goes through syntactic
 analysis, semantic analysis, logical planning, physical planning and then execution.
 Syntactic analysis, or parsing, is used to break down the query into its component structures
 and check that the query conforms to the syntactic rules of SQL. The next step is semantic analysis,
