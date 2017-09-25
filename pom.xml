@@ -99,6 +99,7 @@
         <module>presto-parser</module>
         <module>presto-main</module>
         <module>presto-ml</module>
+        <module>presto-ranger-plugin</module>
         <module>presto-benchmark</module>
         <module>presto-tests</module>
         <module>presto-product-tests</module>
