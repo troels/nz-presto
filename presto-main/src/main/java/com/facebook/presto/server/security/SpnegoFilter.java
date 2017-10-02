@@ -44,11 +44,14 @@ import javax.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.security.Principal;
 import java.security.PrivilegedAction;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static com.google.common.io.ByteStreams.copy;
 import static com.google.common.io.ByteStreams.nullOutputStream;
@@ -79,9 +82,11 @@ public class SpnegoFilter
             try {
                 String principal = config.getPrincipals().get(i);
                 String keytab = config.getKeytabs().get(i);
-                LoginContext loginContext = new LoginContext("", null, null, new Configuration() {
+                LoginContext loginContext = new LoginContext("", null, null, new Configuration()
+                {
                     @Override
-                    public AppConfigurationEntry[] getAppConfigurationEntry(String name) {
+                    public AppConfigurationEntry[] getAppConfigurationEntry(String name)
+                    {
                         Map<String, String> options = new HashMap<>();
                         options.put("refreshKrb5Config", "true");
                         options.put("doNotPrompt", "true");
@@ -92,7 +97,7 @@ public class SpnegoFilter
                         options.put("useKeyTab", "true");
                         options.put("storeKey", "true");
 
-                        return new AppConfigurationEntry[]{new AppConfigurationEntry(Krb5LoginModule.class.getName(), REQUIRED, options)};
+                        return new AppConfigurationEntry[]{ new AppConfigurationEntry(Krb5LoginModule.class.getName(), REQUIRED, options) };
                     }
                 });
                 loginContext.login();
@@ -101,7 +106,8 @@ public class SpnegoFilter
                 GSSName name;
                 try {
                     name = gssManager.createName(principal, GSSName.NT_USER_NAME);
-                } catch (GSSException e) {
+                }
+                catch (GSSException e) {
                     throw new RuntimeException(e);
                 }
 
@@ -114,7 +120,8 @@ public class SpnegoFilter
                                         new Oid("1.3.6.1.5.5.2") // spnego
                                 },
                                 ACCEPT_ONLY)));
-            } catch (LoginException e) {
+            }
+            catch (LoginException e) {
                 throw new RuntimeException(e);
             }
         }
@@ -124,12 +131,12 @@ public class SpnegoFilter
     public void shutdown()
     {
         try {
-            for (LoginContext context: loginContexts) {
+            for (LoginContext context : loginContexts) {
                 context.logout();
             }
         }
         catch (LoginException e) {
-            Throwables.propagate(e);
+            throw new RuntimeException(e);
         }
     }
 
@@ -205,13 +212,16 @@ public class SpnegoFilter
                             new KerberosPrincipal(context.getSrcName().toString())));
                 }
                 LOG.debug("Failed to establish GSS context for token %s", token);
-            } catch (GSSException e) {
+            }
+            catch (GSSException e) {
                 // ignore and fail the authentication
                 LOG.debug(e, "Authentication failed for token %s", token);
-            } finally {
+            }
+            finally {
                 try {
                     context.dispose();
-                } catch (GSSException e) {
+                }
+                catch (GSSException e) {
                     // ignore
                 }
             }

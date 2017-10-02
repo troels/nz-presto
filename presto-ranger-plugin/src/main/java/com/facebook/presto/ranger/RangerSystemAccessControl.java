@@ -34,7 +34,6 @@ import static com.facebook.presto.spi.security.AccessDeniedException.denyCreateT
 import static com.facebook.presto.spi.security.AccessDeniedException.denyCreateView;
 import static com.facebook.presto.spi.security.AccessDeniedException.denyCreateViewWithSelect;
 import static com.facebook.presto.spi.security.AccessDeniedException.denyDeleteTable;
-import static com.facebook.presto.spi.security.AccessDeniedException.denyDropColumn;
 import static com.facebook.presto.spi.security.AccessDeniedException.denyDropSchema;
 import static com.facebook.presto.spi.security.AccessDeniedException.denyDropTable;
 import static com.facebook.presto.spi.security.AccessDeniedException.denyDropView;
@@ -255,15 +254,6 @@ public class RangerSystemAccessControl
         if (!authorizer.canUpdateResource(createResource(table), identity) ||
                 !writeableCatalogs.contains(table.getCatalogName())) {
             denyAddColumn(table.getSchemaTableName().getTableName());
-        }
-    }
-
-    @Override
-    public void checkCanDropColumn(Identity identity, CatalogSchemaTableName table)
-    {
-        if (!authorizer.canUpdateResource(createResource(table), identity) ||
-                !writeableCatalogs.contains(table.getCatalogName())) {
-            denyDropColumn(table.getSchemaTableName().getTableName());
         }
     }
 

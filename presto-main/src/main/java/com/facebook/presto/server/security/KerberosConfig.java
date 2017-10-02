@@ -19,7 +19,6 @@ import javax.validation.constraints.NotNull;
 
 import java.io.File;
 import java.util.List;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -70,34 +69,39 @@ public class KerberosConfig
         return this;
     }
 
-
-    public String getRealm() {
+    public String getRealm()
+    {
         return realm;
     }
 
     @Config("http.server.authentication.krb5.realm")
-    public KerberosConfig setRealm(String realm) {
+    public KerberosConfig setRealm(String realm)
+    {
         this.realm = realm;
         return this;
     }
 
     @Config("http.server.authentication.principals")
-    public KerberosConfig setPrincipals(String principals) {
+    public KerberosConfig setPrincipals(String principals)
+    {
         this.principals = Stream.of(principals.split(",")).map(String::trim).filter((x) -> !x.isEmpty()).collect(Collectors.toList());
         return this;
     }
 
-    public List<String> getPrincipals() {
+    public List<String> getPrincipals()
+    {
         return principals;
     }
 
     @Config("http.server.authentication.keytabs")
-    public KerberosConfig setKeytabs(String keytabs) {
+    public KerberosConfig setKeytabs(String keytabs)
+    {
         this.keytabs = Stream.of(keytabs.split(",")).map(String::trim).filter((x) -> !x.isEmpty()).collect(Collectors.toList());
         return this;
     }
 
-    public List<String> getKeytabs() {
+    public List<String> getKeytabs()
+    {
         return keytabs;
     }
 }
