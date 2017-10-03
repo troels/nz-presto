@@ -18,12 +18,15 @@ import io.airlift.configuration.Config;
 import javax.validation.constraints.NotNull;
 
 import java.io.File;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class KerberosConfig
 {
-    private File kerberosConfig;
-    private String serviceName;
-    private File keytab;
+    private File kerberosConfig = null;
+    private List<String> principals = null;
+    private List<String> keytabs = null;
 
     @NotNull
     public File getKerberosConfig()
@@ -38,28 +41,33 @@ public class KerberosConfig
         return this;
     }
 
-    @NotNull
-    public String getServiceName()
+    @Config("http.server.authentication.principals")
+    public KerberosConfig setPrincipals(String principals)
     {
-        return serviceName;
-    }
-
-    @Config("http.server.authentication.krb5.service-name")
-    public KerberosConfig setServiceName(String serviceName)
-    {
-        this.serviceName = serviceName;
+        if (principals == null) {
+            return this;
+        }
+        this.principals = Stream.of(principals.split(",")).map(String::trim).filter((x) -> !x.isEmpty()).collect(Collectors.toList());
         return this;
     }
 
-    public File getKeytab()
+    public List<String> getPrincipals()
     {
-        return keytab;
+        return principals;
     }
 
-    @Config("http.server.authentication.krb5.keytab")
-    public KerberosConfig setKeytab(File keytab)
+    @Config("http.server.authentication.keytabs")
+    public KerberosConfig setKeytabs(String keytabs)
     {
-        this.keytab = keytab;
+        if (keytabs == null) {
+            return this;
+        }
+        this.keytabs = Stream.of(keytabs.split(",")).map(String::trim).filter((x) -> !x.isEmpty()).collect(Collectors.toList());
         return this;
+    }
+
+    public List<String> getKeytabs()
+    {
+        return keytabs;
     }
 }

@@ -44,13 +44,12 @@ import javax.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.security.Principal;
 import java.security.PrivilegedAction;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
-import java.util.Locale;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -71,52 +70,60 @@ public class SpnegoFilter
     private static final String INCLUDE_REALM_HEADER = "X-Airlift-Realm-In-Challenge";
 
     private final GSSManager gssManager = GSSManager.getInstance();
-    private final LoginContext loginContext;
-    private final GSSCredential serverCredential;
+    private final List<LoginContext> loginContexts = new ArrayList<>();
+    private final List<GSSCredential> serverCredentials = new ArrayList<>();
 
     @Inject
     public SpnegoFilter(KerberosConfig config)
     {
         System.setProperty("java.security.krb5.conf", config.getKerberosConfig().getAbsolutePath());
 
-        try {
-            String hostname = InetAddress.getLocalHost().getCanonicalHostName().toLowerCase(Locale.US);
-            String servicePrincipal = config.getServiceName() + "/" + hostname;
-            loginContext = new LoginContext("", null, null, new Configuration()
-            {
-                @Override
-                public AppConfigurationEntry[] getAppConfigurationEntry(String name)
+        for (int i = 0; i < config.getPrincipals().size(); i++) {
+            try {
+                String principal = config.getPrincipals().get(i);
+                String keytab = config.getKeytabs().get(i);
+                LoginContext loginContext = new LoginContext("", null, null, new Configuration()
                 {
-                    Map<String, String> options = new HashMap<>();
-                    options.put("refreshKrb5Config", "true");
-                    options.put("doNotPrompt", "true");
-                    if (LOG.isDebugEnabled()) {
+                    @Override
+                    public AppConfigurationEntry[] getAppConfigurationEntry(String name)
+                    {
+                        Map<String, String> options = new HashMap<>();
+                        options.put("refreshKrb5Config", "true");
+                        options.put("doNotPrompt", "true");
                         options.put("debug", "true");
-                    }
-                    if (config.getKeytab() != null) {
-                        options.put("keyTab", config.getKeytab().getAbsolutePath());
-                    }
-                    options.put("isInitiator", "false");
-                    options.put("useKeyTab", "true");
-                    options.put("principal", servicePrincipal);
-                    options.put("storeKey", "true");
+                        options.put("keyTab", keytab);
+                        options.put("isInitiator", "false");
+                        options.put("principal", principal);
+                        options.put("useKeyTab", "true");
+                        options.put("storeKey", "true");
 
-                    return new AppConfigurationEntry[] {new AppConfigurationEntry(Krb5LoginModule.class.getName(), REQUIRED, options)};
+                        return new AppConfigurationEntry[]{ new AppConfigurationEntry(Krb5LoginModule.class.getName(), REQUIRED, options) };
+                    }
+                });
+                loginContext.login();
+
+                loginContexts.add(loginContext);
+                GSSName name;
+                try {
+                    name = gssManager.createName(principal, GSSName.NT_USER_NAME);
                 }
-            });
-            loginContext.login();
+                catch (GSSException e) {
+                    throw new RuntimeException(e);
+                }
 
-            serverCredential = doAs(loginContext.getSubject(), () -> gssManager.createCredential(
-                    gssManager.createName(config.getServiceName() + "@" + hostname, GSSName.NT_HOSTBASED_SERVICE),
-                    INDEFINITE_LIFETIME,
-                    new Oid[] {
-                            new Oid("1.2.840.113554.1.2.2"), // kerberos 5
-                            new Oid("1.3.6.1.5.5.2") // spnego
-                    },
-                    ACCEPT_ONLY));
-        }
-        catch (LoginException | UnknownHostException e) {
-            throw Throwables.propagate(e);
+                serverCredentials.add(
+                        doAs(loginContext.getSubject(), () -> gssManager.createCredential(
+                                name,
+                                INDEFINITE_LIFETIME,
+                                new Oid[]{
+                                        new Oid("1.2.840.113554.1.2.2"), // kerberos 5
+                                        new Oid("1.3.6.1.5.5.2") // spnego
+                                },
+                                ACCEPT_ONLY)));
+            }
+            catch (LoginException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
@@ -124,10 +131,12 @@ public class SpnegoFilter
     public void shutdown()
     {
         try {
-            loginContext.logout();
+            for (LoginContext context : loginContexts) {
+                context.logout();
+            }
         }
         catch (LoginException e) {
-            Throwables.propagate(e);
+            throw new RuntimeException(e);
         }
     }
 
@@ -183,34 +192,40 @@ public class SpnegoFilter
     private Optional<Result> authenticate(String token)
             throws GSSException
     {
-        GSSContext context = doAs(loginContext.getSubject(), () -> gssManager.createContext(serverCredential));
+        LOG.info("Attempting gss login");
+        for (int i = 0; i < loginContexts.size(); i++) {
+            LOG.info("Attempting gss login " + i);
+            GSSCredential gssCredential = serverCredentials.get(i);
+            GSSContext context = doAs(
+                    loginContexts.get(i).getSubject(),
+                    () -> gssManager.createContext(gssCredential));
 
-        try {
-            byte[] inputToken = Base64.getDecoder().decode(token);
-            byte[] outputToken = context.acceptSecContext(inputToken, 0, inputToken.length);
-
-            // We can't hold on to the GSS context because HTTP is stateless, so fail
-            // if it can't be set up in a single challenge-response cycle
-            if (context.isEstablished()) {
-                return Optional.of(new Result(
-                        Optional.ofNullable(outputToken),
-                        new KerberosPrincipal(context.getSrcName().toString())));
-            }
-            LOG.debug("Failed to establish GSS context for token %s", token);
-        }
-        catch (GSSException e) {
-            // ignore and fail the authentication
-            LOG.debug(e, "Authentication failed for token %s", token);
-        }
-        finally {
             try {
-                context.dispose();
+                byte[] inputToken = Base64.getDecoder().decode(token);
+                byte[] outputToken = context.acceptSecContext(inputToken, 0, inputToken.length);
+
+                // We can't hold on to the GSS context because HTTP is stateless, so fail
+                // if it can't be set up in a single challenge-response cycle
+                if (context.isEstablished()) {
+                    return Optional.of(new Result(
+                            Optional.ofNullable(outputToken),
+                            new KerberosPrincipal(context.getSrcName().toString())));
+                }
+                LOG.debug("Failed to establish GSS context for token %s", token);
             }
             catch (GSSException e) {
-                // ignore
+                // ignore and fail the authentication
+                LOG.debug(e, "Authentication failed for token %s", token);
+            }
+            finally {
+                try {
+                    context.dispose();
+                }
+                catch (GSSException e) {
+                    // ignore
+                }
             }
         }
-
         return Optional.empty();
     }
 
