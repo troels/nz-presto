@@ -151,8 +151,10 @@
             <unpack />
         </artifact>
     </artifactSet>
-     
-    <artifactSet to="plugin/ranger">
-        <artifact id="${project.groupId}:presto-ranger-plugin:jar:${project.version}" />
-    </artifactSet>
+
+    <fileSet to="plugin/ranger">
+      <file
+	  path="${basedir}/../presto-ranger-plugin/target/presto-ranger-plugin-${project.version}.jar"
+	  />
+    </fileSet>
 </runtime>
