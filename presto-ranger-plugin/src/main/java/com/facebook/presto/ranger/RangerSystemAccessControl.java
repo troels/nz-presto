@@ -22,11 +22,15 @@ import io.airlift.log.Logger;
 
 import java.security.Principal;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.facebook.presto.spi.security.AccessDeniedException.denyAddColumn;
 import static com.facebook.presto.spi.security.AccessDeniedException.denyCreateSchema;
@@ -46,6 +50,8 @@ import static com.facebook.presto.spi.security.AccessDeniedException.denySelectV
 import static com.facebook.presto.spi.security.AccessDeniedException.denySetSystemSessionProperty;
 import static com.facebook.presto.spi.security.AccessDeniedException.denySetUser;
 import static com.facebook.presto.spi.security.AccessDeniedException.denyShowTablesMetadata;
+import static java.util.Comparator.comparing;
+import static java.util.stream.Collectors.toList;
 
 public class RangerSystemAccessControl
         implements SystemAccessControl
@@ -167,13 +173,14 @@ public class RangerSystemAccessControl
         List<RangerPrestoResource> rangerResources = tableNames
                 .stream()
                 .map(t -> new RangerPrestoResource(t.getSchemaName(), Optional.of(t.getTableName())))
-                .collect(Collectors.toList());
+                .collect(toList());
 
-        return authorizer
+        Stream<SchemaTableName> outTables = authorizer
                 .filterResources(rangerResources, identity)
                 .stream()
-                .map(RangerPrestoResource::getSchemaTable)
-                .collect(Collectors.toSet());
+                .map(RangerPrestoResource::getSchemaTable);
+
+        return makeSortedSet(outTables, comparing(t -> t.toString().toLowerCase()));
     }
 
     @Override
@@ -182,16 +189,24 @@ public class RangerSystemAccessControl
         List<RangerPrestoResource> rangerResources = schemaNames
                 .stream()
                 .map(schemaName -> new RangerPrestoResource(schemaName, Optional.empty()))
-                .collect(Collectors.toList());
+                .collect(toList());
 
-        return authorizer
+        Stream<String> outSchemas = authorizer
                 .filterResources(rangerResources, identity)
                 .stream()
-                .map(RangerPrestoResource::getDatabase)
-                .collect(Collectors.toSet());
+                .map(RangerPrestoResource::getDatabase);
+
+        return makeSortedSet(outSchemas, comparing(String::toLowerCase));
     }
 
-    @Override
+    private <T> SortedSet<T> makeSortedSet(Stream<T> it, Comparator<T> comparator)
+    {
+        SortedSet<T> set = new TreeSet<>(comparator);
+        it.forEach(set::add);
+        return set;
+    }
+
+        @Override
     public void checkCanCreateSchema(Identity identity, CatalogSchemaName schema)
     {
         if (!authorizer.canCreateResource(createResource(schema), identity) ||
