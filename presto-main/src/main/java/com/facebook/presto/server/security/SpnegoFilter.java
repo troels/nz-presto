@@ -14,6 +14,7 @@
 package com.facebook.presto.server.security;
 
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableList;
 import com.google.common.net.HttpHeaders;
 import com.sun.security.auth.module.Krb5LoginModule;
 import io.airlift.log.Logger;
@@ -41,6 +42,7 @@ import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -48,14 +50,20 @@ import java.security.Principal;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
+import static com.facebook.presto.client.PrestoHeaders.PRESTO_USER;
 import static com.google.common.io.ByteStreams.copy;
 import static com.google.common.io.ByteStreams.nullOutputStream;
 import static java.lang.String.format;
+import static java.util.Collections.enumeration;
+import static java.util.Collections.list;
 import static javax.security.auth.login.AppConfigurationEntry.LoginModuleControlFlag.REQUIRED;
 import static javax.servlet.http.HttpServletResponse.SC_UNAUTHORIZED;
 import static org.ietf.jgss.GSSCredential.ACCEPT_ONLY;
@@ -65,6 +73,9 @@ public class SpnegoFilter
         implements Filter
 {
     private static final Logger LOG = Logger.get(SpnegoFilter.class);
+
+    public static final String SESSION_PRINCIPAL = "principal";
+    public static final String SESSION_USERNAME = "username";
 
     private static final String NEGOTIATE_SCHEME = "Negotiate";
     private static final String INCLUDE_REALM_HEADER = "X-Airlift-Realm-In-Challenge";
@@ -152,11 +163,22 @@ public class SpnegoFilter
 
         HttpServletRequest request = (HttpServletRequest) servletRequest;
         HttpServletResponse response = (HttpServletResponse) servletResponse;
+        HttpSession session = request.getSession();
+        Object p = session.getAttribute(SESSION_PRINCIPAL);
+        Object u = session.getAttribute(SESSION_USERNAME);
+
+        if (p != null && u != null) {
+            runAlongWithPrincipal(p, nextFilter, request, response);
+            return;
+        }
 
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
 
         boolean includeRealm = "true".equalsIgnoreCase(request.getHeader(INCLUDE_REALM_HEADER));
         String requestSpnegoToken = null;
+
+        session.removeAttribute(SESSION_PRINCIPAL);
+        session.removeAttribute(SESSION_USERNAME);
 
         if (header != null) {
             String[] parts = header.split("\\s+");
@@ -169,14 +191,10 @@ public class SpnegoFilter
                                 .getToken()
                                 .ifPresent(token -> response.setHeader(HttpHeaders.WWW_AUTHENTICATE, formatAuthenticationHeader(includeRealm, Optional.ofNullable(token))));
 
-                        nextFilter.doFilter(new HttpServletRequestWrapper(request)
-                        {
-                            @Override
-                            public Principal getUserPrincipal()
-                            {
-                                return authentication.get().getPrincipal();
-                            }
-                        }, servletResponse);
+                        KerberosPrincipal principal = authentication.get().getPrincipal();
+                        session.setAttribute("principal", principal);
+
+                        runAlongWithPrincipal(principal, nextFilter, request, response);
                         return;
                     }
                 }
@@ -187,6 +205,60 @@ public class SpnegoFilter
         }
 
         sendChallenge(request, response, includeRealm, requestSpnegoToken);
+    }
+
+    private void runAlongWithPrincipal(Object p, FilterChain nextFilter, HttpServletRequest request, HttpServletResponse response)
+            throws IOException, ServletException
+    {
+        KerberosPrincipal principal = (KerberosPrincipal) p;
+        HttpSession session = request.getSession();
+        String username = (String) session.getAttribute(SESSION_USERNAME);
+
+        if (username == null) {
+            String prestoUser = request.getHeader(PRESTO_USER);
+            if (prestoUser != null) {
+                session.setAttribute(SESSION_USERNAME, prestoUser);
+            }
+        }
+
+        nextFilter.doFilter(new HttpServletRequestWrapper(request)
+        {
+            @Override
+            public String getHeader(String name)
+            {
+                if (username != null && PRESTO_USER.equalsIgnoreCase(name)) {
+                    return username;
+                }
+                return super.getHeader(name);
+            }
+
+            @Override
+            public Enumeration<String> getHeaders(String name)
+            {
+                if (username != null && PRESTO_USER.equalsIgnoreCase(name)) {
+                    return enumeration(ImmutableList.of(username));
+                }
+                return super.getHeaders(name);
+            }
+
+            @Override
+            public Enumeration<String> getHeaderNames()
+            {
+                Enumeration<String> headerNames = super.getHeaderNames();
+                if (username == null) {
+                    return headerNames;
+                }
+                Set<String> newHeaderNames = new HashSet<>(list(headerNames));
+                newHeaderNames.add(PRESTO_USER);
+                return enumeration(newHeaderNames);
+            }
+
+            @Override
+            public Principal getUserPrincipal()
+            {
+                return principal;
+            }
+        }, response);
     }
 
     private Optional<Result> authenticate(String token)
