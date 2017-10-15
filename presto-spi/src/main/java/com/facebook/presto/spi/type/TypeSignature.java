@@ -51,6 +51,9 @@ public class TypeSignature
 
     public TypeSignature(String base, List<TypeSignatureParameter> parameters)
     {
+        if ("float".equalsIgnoreCase(base)) {
+            base = "double";
+        }
         checkArgument(base != null, "base is null");
         this.base = base;
         checkArgument(!base.isEmpty(), "base is empty");
