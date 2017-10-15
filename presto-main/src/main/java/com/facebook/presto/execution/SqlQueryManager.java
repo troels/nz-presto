@@ -50,6 +50,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import javax.inject.Inject;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -331,6 +332,49 @@ public class SqlQueryManager
         query.recordHeartbeat();
     }
 
+    private static class SimpleQuery
+    {
+        private final Session session;
+        private final QueryId queryId;
+        private final QueryExecutionFactory factory;
+        private final Statement statement;
+        private final List<Expression> parameters;
+
+        private SimpleQuery(Session session, QueryId queryId, QueryExecutionFactory factory, Statement statement, List<Expression> parameters)
+        {
+            this.session = session;
+            this.queryId = queryId;
+            this.factory = factory;
+            this.statement = statement;
+            this.parameters = parameters;
+        }
+
+        public Session getSession()
+        {
+            return session;
+        }
+
+        public QueryId getQueryId()
+        {
+            return queryId;
+        }
+
+        public QueryExecutionFactory getFactory()
+        {
+            return factory;
+        }
+
+        public Statement getStatement()
+        {
+            return statement;
+        }
+
+        public List<Expression> getParameters()
+        {
+            return parameters;
+        }
+    }
+
     @Override
     public QueryInfo createQuery(SessionSupplier sessionSupplier, String query)
     {
@@ -338,92 +382,110 @@ public class SqlQueryManager
         requireNonNull(query, "query is null");
         checkArgument(!query.isEmpty(), "query must not be empty string");
 
-        QueryId queryId = queryIdGenerator.createNextQueryId();
+        List<SimpleQuery> simpleQueries = new ArrayList<>();
+        int queryNumber = 0;
+        while (true) {
+            QueryId queryId = queryIdGenerator.createNextQueryId();
+            Session session = sessionSupplier
+                    .createSession(queryId, transactionManager, accessControl, sessionPropertyManager);
 
-        Session session = null;
-        QueryExecution queryExecution;
-        Statement statement;
-        try {
-            session = sessionSupplier.createSession(queryId, transactionManager, accessControl, sessionPropertyManager);
-            if (query.length() > maxQueryLength) {
-                int queryLength = query.length();
-                query = query.substring(0, maxQueryLength);
-                throw new PrestoException(QUERY_TEXT_TOO_LARGE, format("Query text length (%s) exceeds the maximum length (%s)", queryLength, maxQueryLength));
-            }
-            ParsingOptions parsingOptions = new ParsingOptions().setParseDecimalLiteralsAsDouble(isParseDecimalLiteralsAsDouble(session));
-            Statement wrappedStatement = sqlParser.createStatement(query, parsingOptions);
-            statement = unwrapExecuteStatement(wrappedStatement, sqlParser, session);
-            List<Expression> parameters = wrappedStatement instanceof Execute ? ((Execute) wrappedStatement).getParameters() : emptyList();
-            validateParameters(statement, parameters);
-            QueryExecutionFactory<?> queryExecutionFactory = executionFactories.get(statement.getClass());
-            if (queryExecutionFactory == null) {
-                throw new PrestoException(NOT_SUPPORTED, "Unsupported statement type: " + statement.getClass().getSimpleName());
-            }
-            if (statement instanceof Explain && ((Explain) statement).isAnalyze()) {
-                Statement innerStatement = ((Explain) statement).getStatement();
-                if (!(executionFactories.get(innerStatement.getClass()) instanceof SqlQueryExecutionFactory)) {
-                    throw new PrestoException(NOT_SUPPORTED, "EXPLAIN ANALYZE only supported for statements that are queries");
+            try {
+                if (query.length() > maxQueryLength) {
+                    int queryLength = query.length();
+                    query = query.substring(0, maxQueryLength);
+                    throw new PrestoException(QUERY_TEXT_TOO_LARGE, format("Query text length (%s) exceeds the maximum length (%s)", queryLength, maxQueryLength));
                 }
+                ParsingOptions parsingOptions = new ParsingOptions()
+                        .setParseDecimalLiteralsAsDouble(isParseDecimalLiteralsAsDouble(session));
+                Statement wrappedStatement = sqlParser.createStatement(query, parsingOptions);
+                Statement statement = unwrapExecuteStatement(wrappedStatement, sqlParser, session);
+                List<Expression> parameters = wrappedStatement instanceof Execute ? ((Execute) wrappedStatement)
+                        .getParameters() : emptyList();
+                int parameterCount = getParameterCount(statement);
+                validateParameters(statement, parameters);
+
+                if (statement instanceof Explain && ((Explain) statement).isAnalyze()) {
+                    Statement innerStatement = ((Explain) statement).getStatement();
+                    if (!(executionFactories.get(innerStatement.getClass()) instanceof SqlQueryExecutionFactory)) {
+                        throw new PrestoException(NOT_SUPPORTED, "EXPLAIN ANALYZE only supported for statements that are queries");
+                    }
+                }
+
+                List<Expression> currentParameters = parameters.subList(queryNumber * parameterCount, (queryNumber + 1) * parameterCount);
+
+                QueryExecutionFactory<?> queryExecutionFactory = executionFactories.get(statement.getClass());
+                if (queryExecutionFactory == null) {
+                    throw new PrestoException(NOT_SUPPORTED, "Unsupported statement type: " + statement.getClass().getSimpleName());
+                }
+                simpleQueries.add(new SimpleQuery(session, queryId, queryExecutionFactory, statement, currentParameters));
+                if (parameterCount == 0 || parameters.size() / parameterCount <= queryNumber) {
+                    break;
+                }
+                queryNumber++;
             }
-            queryExecution = queryExecutionFactory.createQueryExecution(queryId, query, session, statement, parameters);
+            catch (ParsingException | PrestoException | SemanticException e) {
+                // This is intentionally not a method, since after the state change listener is registered
+                // it's not safe to do any of this, and we had bugs before where people reused this code in a method
+                URI self = locationFactory.createQueryLocation(queryId);
+
+                // if session creation failed, create a minimal session object
+                if (session == null) {
+                    session = Session.builder(new SessionPropertyManager())
+                            .setQueryId(queryId)
+                            .setIdentity(sessionSupplier.getIdentity())
+                            .build();
+                }
+                Optional<ResourceGroupId> resourceGroup = Optional.empty();
+                if (e instanceof QueryQueueFullException) {
+                    resourceGroup = Optional.of(((QueryQueueFullException) e).getResourceGroup());
+                }
+                QueryExecution execution = new FailedQueryExecution(queryId, query, resourceGroup, session, self, transactionManager, queryExecutor, metadata, e);
+
+                QueryInfo queryInfo = null;
+                try {
+                    queries.put(queryId, execution);
+
+                    queryInfo = execution.getQueryInfo();
+                    queryMonitor.queryCreatedEvent(queryInfo);
+                    queryMonitor.queryCompletedEvent(queryInfo);
+                    stats.queryFinished(queryInfo);
+                }
+                finally {
+                    // execution MUST be added to the expiration queue or there will be a leak
+                    expirationQueue.add(execution);
+                }
+
+                return queryInfo;
+            }
         }
-        catch (ParsingException | PrestoException | SemanticException e) {
-            // This is intentionally not a method, since after the state change listener is registered
-            // it's not safe to do any of this, and we had bugs before where people reused this code in a method
-            URI self = locationFactory.createQueryLocation(queryId);
 
-            // if session creation failed, create a minimal session object
-            if (session == null) {
-                session = Session.builder(new SessionPropertyManager())
-                        .setQueryId(queryId)
-                        .setIdentity(sessionSupplier.getIdentity())
-                        .build();
-            }
-            Optional<ResourceGroupId> resourceGroup = Optional.empty();
-            if (e instanceof QueryQueueFullException) {
-                resourceGroup = Optional.of(((QueryQueueFullException) e).getResourceGroup());
-            }
-            QueryExecution execution = new FailedQueryExecution(queryId, query, resourceGroup, session, self, transactionManager, queryExecutor, metadata, e);
+        QueryInfo queryInfo = null;
+        for (SimpleQuery simpleQuery : simpleQueries) {
+            QueryId queryId = simpleQuery.getQueryId();
+            QueryExecution queryExecution = simpleQuery.getFactory().createQueryExecution(
+                    queryId, query, simpleQuery.getSession(), simpleQuery.getStatement(), simpleQuery.getParameters());
+            queryInfo = queryExecution.getQueryInfo();
+            queryMonitor.queryCreatedEvent(queryInfo);
 
-            QueryInfo queryInfo = null;
-            try {
-                queries.put(queryId, execution);
+            queryExecution.addFinalQueryInfoListener(finalQueryInfo -> {
+                try {
+                    QueryInfo info = queryExecution.getQueryInfo();
+                    stats.queryFinished(info);
+                    queryMonitor.queryCompletedEvent(info);
+                }
+                finally {
+                    // execution MUST be added to the expiration queue or there will be a leak
+                    expirationQueue.add(queryExecution);
+                }
+            });
 
-                queryInfo = execution.getQueryInfo();
-                queryMonitor.queryCreatedEvent(queryInfo);
-                queryMonitor.queryCompletedEvent(queryInfo);
-                stats.queryFinished(queryInfo);
-            }
-            finally {
-                // execution MUST be added to the expiration queue or there will be a leak
-                expirationQueue.add(execution);
-            }
+            addStatsListener(queryExecution);
 
-            return queryInfo;
+            queries.put(queryId, queryExecution);
+
+            // start the query in the background
+            queueManager.submit(simpleQuery.getStatement(), queryExecution, queryExecutor);
         }
-
-        QueryInfo queryInfo = queryExecution.getQueryInfo();
-        queryMonitor.queryCreatedEvent(queryInfo);
-
-        queryExecution.addFinalQueryInfoListener(finalQueryInfo -> {
-            try {
-                QueryInfo info = queryExecution.getQueryInfo();
-                stats.queryFinished(info);
-                queryMonitor.queryCompletedEvent(info);
-            }
-            finally {
-                // execution MUST be added to the expiration queue or there will be a leak
-                expirationQueue.add(queryExecution);
-            }
-        });
-
-        addStatsListener(queryExecution);
-
-        queries.put(queryId, queryExecution);
-
-        // start the query in the background
-        queueManager.submit(statement, queryExecution, queryExecutor);
-
         return queryInfo;
     }
 
@@ -441,7 +503,8 @@ public class SqlQueryManager
     public static void validateParameters(Statement node, List<Expression> parameterValues)
     {
         int parameterCount = getParameterCount(node);
-        if (parameterValues.size() != parameterCount) {
+        int parameterValueCount = parameterValues.size();
+        if (parameterValueCount != parameterCount && (parameterCount == 0 || parameterValueCount % parameterCount != 0)) {
             throw new SemanticException(INVALID_PARAMETER_USAGE, node, "Incorrect number of parameters: expected %s but found %s", parameterCount, parameterValues.size());
         }
         for (Expression expression : parameterValues) {
