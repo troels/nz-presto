@@ -52,5 +52,6 @@ build: prep-build
 package: clean build
 	pushd build; \
 	fpm -a all -s dir -t deb -d "uuid-runtime" -n $(name) -v $(version) --after-install ../scripts/postinst -- .; \
-	mv *.deb ../releases; \
+	mkdir -p ../releases; \
+	mv *.deb ../releases/; \
 	popd;
