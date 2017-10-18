@@ -35,8 +35,16 @@ import com.facebook.presto.sql.planner.Plan;
 import com.facebook.presto.sql.tree.Execute;
 import com.facebook.presto.sql.tree.Explain;
 import com.facebook.presto.sql.tree.Expression;
+import com.facebook.presto.sql.tree.ExpressionRewriter;
+import com.facebook.presto.sql.tree.ExpressionTreeRewriter;
+import com.facebook.presto.sql.tree.Insert;
+import com.facebook.presto.sql.tree.Parameter;
+import com.facebook.presto.sql.tree.Query;
+import com.facebook.presto.sql.tree.QueryBody;
 import com.facebook.presto.sql.tree.Statement;
+import com.facebook.presto.sql.tree.Values;
 import com.facebook.presto.transaction.TransactionManager;
+import com.google.common.collect.ImmutableList;
 import io.airlift.concurrent.ThreadPoolExecutorMBean;
 import io.airlift.log.Logger;
 import io.airlift.units.Duration;
@@ -76,6 +84,7 @@ import static com.facebook.presto.spi.StandardErrorCode.QUERY_TEXT_TOO_LARGE;
 import static com.facebook.presto.spi.StandardErrorCode.SERVER_SHUTTING_DOWN;
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.INVALID_PARAMETER_USAGE;
 import static com.facebook.presto.sql.planner.ExpressionInterpreter.verifyExpressionIsConstant;
+import static com.facebook.presto.sql.tree.ExpressionTreeRewriter.rewriteWith;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static io.airlift.concurrent.Threads.threadsNamed;
@@ -354,7 +363,9 @@ public class SqlQueryManager
             Statement wrappedStatement = sqlParser.createStatement(query, parsingOptions);
             statement = unwrapExecuteStatement(wrappedStatement, sqlParser, session);
             List<Expression> parameters = wrappedStatement instanceof Execute ? ((Execute) wrappedStatement).getParameters() : emptyList();
+            statement = rewritePreparedInsert(statement, parameters);
             validateParameters(statement, parameters);
+
             QueryExecutionFactory<?> queryExecutionFactory = executionFactories.get(statement.getClass());
             if (queryExecutionFactory == null) {
                 throw new PrestoException(NOT_SUPPORTED, "Unsupported statement type: " + statement.getClass().getSimpleName());
@@ -436,6 +447,59 @@ public class SqlQueryManager
         String sql = session.getPreparedStatementFromExecute((Execute) statement);
         ParsingOptions parsingOptions = new ParsingOptions().setParseDecimalLiteralsAsDouble(isParseDecimalLiteralsAsDouble(session));
         return sqlParser.createStatement(sql, parsingOptions);
+    }
+
+    private static Statement rewritePreparedInsert(Statement node, List<Expression> parameterValues)
+    {
+        int parameterCount = getParameterCount(node);
+        if (parameterValues.size() == 0 || parameterCount == 0 || parameterValues.size() == parameterCount) {
+            return node;
+        }
+
+        if (parameterValues.size() % parameterCount != 0) {
+            throw new SemanticException(INVALID_PARAMETER_USAGE, node, "Incorrect number of parameters: expected %s but found %s", parameterCount, parameterValues.size());
+        }
+        if (!(node instanceof Insert)) {
+            throw new SemanticException(INVALID_PARAMETER_USAGE, node, "Incorrect number of parameters: expected %s but found %s", parameterCount, parameterValues.size());
+        }
+
+        Insert insert = (Insert) node;
+        Query query = insert.getQuery();
+        QueryBody queryBody = query.getQueryBody();
+
+        if (!(queryBody instanceof Values)) {
+            throw new SemanticException(INVALID_PARAMETER_USAGE, node, "Incorrect number of parameters: expected %s but found %s", parameterCount, parameterValues.size());
+        }
+
+        Values values = (Values) queryBody;
+        if (values.getRows().size() != 1) {
+            throw new SemanticException(INVALID_PARAMETER_USAGE, node, "Incorrect number of parameters: expected %s but found %s", parameterCount, parameterValues.size());
+        }
+
+        Expression expression = values.getRows().get(0);
+        ImmutableList.Builder<Expression> expressions = ImmutableList.builder();
+        for (int i = 0; i < parameterValues.size() / parameterCount; i++) {
+            int currentOffset = i * parameterCount;
+            Expression newExpression = rewriteWith(new ExpressionRewriter<Void>()
+            {
+                @Override
+                public Expression rewriteParameter(Parameter node, Void context, ExpressionTreeRewriter<Void> treeRewriter)
+                {
+                    return new Parameter(currentOffset + node.getPosition());
+                }
+            }, expression);
+            expressions.add(newExpression);
+        }
+
+        Insert res = new Insert(
+                insert.getTarget(),
+                insert.getColumns(),
+                new Query(
+                        query.getWith(),
+                        new Values(expressions.build()),
+                        query.getOrderBy(),
+                        query.getLimit()));
+        return res;
     }
 
     public static void validateParameters(Statement node, List<Expression> parameterValues)
