@@ -29,7 +29,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.facebook.presto.spi.security.AccessDeniedException.denyAddColumn;
@@ -50,8 +49,9 @@ import static com.facebook.presto.spi.security.AccessDeniedException.denySelectV
 import static com.facebook.presto.spi.security.AccessDeniedException.denySetSystemSessionProperty;
 import static com.facebook.presto.spi.security.AccessDeniedException.denySetUser;
 import static com.facebook.presto.spi.security.AccessDeniedException.denyShowTablesMetadata;
+import static com.google.common.collect.ImmutableList.toImmutableList;
+import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static java.util.Comparator.comparing;
-import static java.util.stream.Collectors.toList;
 
 public class RangerSystemAccessControl
         implements SystemAccessControl
@@ -68,7 +68,7 @@ public class RangerSystemAccessControl
         this.authorizer = prestoAuthorizer;
 
         String[] writeableCatalogs = config.getOrDefault("writeable-catalogs", "").split(",");
-        this.writeableCatalogs = Arrays.stream(writeableCatalogs).filter(s -> !s.isEmpty()).collect(Collectors.toSet());
+        this.writeableCatalogs = Arrays.stream(writeableCatalogs).filter(s -> !s.isEmpty()).collect(toImmutableSet());
 
         log.info("Writeable catalogs: " + this.writeableCatalogs);
         String[] powerPrincipals = config.getOrDefault("power-principals", "")
@@ -76,14 +76,14 @@ public class RangerSystemAccessControl
         this.powerPrincipals = Arrays.stream(powerPrincipals)
                 .filter(s -> !s.isEmpty())
                 .map(String::toLowerCase)
-                .collect(Collectors.toSet());
+                .collect(toImmutableSet());
 
         String[] powerUsers = config.getOrDefault("power-users", "")
                 .split(",");
         this.powerUsers = Arrays.stream(powerUsers)
                 .filter(s -> !s.isEmpty())
                 .map(String::toLowerCase)
-                .collect(Collectors.toSet());
+                .collect(toImmutableSet());
     }
 
     @Override
@@ -173,7 +173,7 @@ public class RangerSystemAccessControl
         List<RangerPrestoResource> rangerResources = tableNames
                 .stream()
                 .map(t -> new RangerPrestoResource(t.getSchemaName(), Optional.of(t.getTableName())))
-                .collect(toList());
+                .collect(toImmutableList());
 
         Stream<SchemaTableName> outTables = authorizer
                 .filterResources(rangerResources, identity)
@@ -189,7 +189,7 @@ public class RangerSystemAccessControl
         List<RangerPrestoResource> rangerResources = schemaNames
                 .stream()
                 .map(schemaName -> new RangerPrestoResource(schemaName, Optional.empty()))
-                .collect(toList());
+                .collect(toImmutableList());
 
         Stream<String> outSchemas = authorizer
                 .filterResources(rangerResources, identity)
