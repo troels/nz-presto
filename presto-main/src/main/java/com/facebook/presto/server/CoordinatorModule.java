@@ -64,6 +64,7 @@ import com.facebook.presto.execution.scheduler.SplitSchedulerStats;
 import com.facebook.presto.memory.ClusterMemoryManager;
 import com.facebook.presto.memory.ForMemoryManager;
 import com.facebook.presto.operator.ForScheduler;
+import com.facebook.presto.security.LoginTokenStore;
 import com.facebook.presto.server.remotetask.RemoteTaskStats;
 import com.facebook.presto.spi.memory.ClusterMemoryPoolManager;
 import com.facebook.presto.spi.security.SelectedRole;
@@ -183,6 +184,10 @@ public class CoordinatorModule
             binder.bind(new TypeLiteral<List<QueryQueueRule>>() {}).toProvider(QueryQueueRuleFactory.class).in(Scopes.SINGLETON);
         }
         newExporter(binder).export(QueryManager.class).withGeneratedName();
+
+        // login token resource
+        binder.bind(LoginTokenStore.class).in(Scopes.SINGLETON);
+        jaxrsBinder(binder).bind(LoginTokenResource.class);
 
         // cluster memory manager
         binder.bind(ClusterMemoryManager.class).in(Scopes.SINGLETON);

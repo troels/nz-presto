@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.server.security;
 
+import com.facebook.presto.security.LoginTokenStore;
 import com.google.common.base.Throwables;
 import com.google.common.net.HttpHeaders;
 import com.sun.security.auth.module.Krb5LoginModule;
@@ -53,6 +54,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.facebook.presto.client.PrestoHeaders.PRESTO_LOGIN_TOKEN;
+import static com.facebook.presto.client.PrestoHeaders.PRESTO_USER;
 import static com.google.common.io.ByteStreams.copy;
 import static com.google.common.io.ByteStreams.nullOutputStream;
 import static java.lang.String.format;
@@ -72,11 +75,14 @@ public class SpnegoFilter
     private final GSSManager gssManager = GSSManager.getInstance();
     private final List<LoginContext> loginContexts = new ArrayList<>();
     private final List<GSSCredential> serverCredentials = new ArrayList<>();
+    private final LoginTokenStore loginTokenStore;
 
     @Inject
-    public SpnegoFilter(KerberosConfig config)
+    public SpnegoFilter(KerberosConfig config, LoginTokenStore loginTokenStore)
     {
         System.setProperty("java.security.krb5.conf", config.getKerberosConfig().getAbsolutePath());
+
+        this.loginTokenStore = loginTokenStore;
 
         for (int i = 0; i < config.getPrincipals().size(); i++) {
             try {
@@ -152,6 +158,27 @@ public class SpnegoFilter
 
         HttpServletRequest request = (HttpServletRequest) servletRequest;
         HttpServletResponse response = (HttpServletResponse) servletResponse;
+
+        String loginToken = request.getHeader(PRESTO_LOGIN_TOKEN);
+        if (loginToken != null) {
+            Optional<String> maybeUser = loginTokenStore.getUser(loginToken);
+            Optional<Principal> maybePrincipal = loginTokenStore.getPrincipal(loginToken);
+            String prestoUser = request.getHeader(PRESTO_USER);
+            if (maybeUser.isPresent() && maybePrincipal.isPresent() && maybeUser.get().equalsIgnoreCase(prestoUser)) {
+                String user = maybeUser.get();
+                Principal principal = maybePrincipal.get();
+
+                nextFilter.doFilter(new HttpServletRequestWrapper(request)
+                {
+                    @Override
+                    public Principal getUserPrincipal()
+                    {
+                        return principal;
+                    }
+                }, servletResponse);
+                return;
+            }
+        }
 
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
 
