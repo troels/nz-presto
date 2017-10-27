@@ -262,9 +262,14 @@ public final class TypeRegistry
                 return Optional.of(getCommonSuperTypeForDecimal(
                         (DecimalType) firstType, (DecimalType) secondType));
             }
+
             if (firstTypeBaseName.equals(StandardTypes.VARCHAR)) {
                 return Optional.of(getCommonSuperTypeForVarchar(
                         (VarcharType) firstType, (VarcharType) secondType));
+            }
+
+            if (firstTypeBaseName.equals(StandardTypes.CHAR)) {
+                return Optional.of(getCommonSuperTypeForChar((CharType) firstType, (CharType) secondType));
             }
 
             if (isCovariantParametrizedType(firstType)) {
@@ -284,6 +289,11 @@ public final class TypeRegistry
         }
 
         return Optional.empty();
+    }
+
+    private static Type getCommonSuperTypeForChar(CharType firstType, CharType secondType)
+    {
+        return createCharType(Math.max(firstType.getLength(), secondType.getLength()));
     }
 
     private static Type getCommonSuperTypeForDecimal(DecimalType firstType, DecimalType secondType)
