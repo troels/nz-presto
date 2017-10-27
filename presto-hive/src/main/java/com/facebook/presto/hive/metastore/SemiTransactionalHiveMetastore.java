@@ -394,16 +394,28 @@ public class SemiTransactionalHiveMetastore
         setShared();
         SchemaTableName schemaTableName = new SchemaTableName(databaseName, tableName);
         Action<TableAndMore> oldTableAction = tableActions.get(schemaTableName);
-        if (oldTableAction == null) {
+
+        if (oldTableAction == null || oldTableAction.getType() == ActionType.INSERT_EXISTING) {
             Optional<Table> table = delegate.getTable(databaseName, tableName);
             if (!table.isPresent()) {
                 throw new TableNotFoundException(schemaTableName);
             }
+
             tableActions.put(
                     schemaTableName,
                     new Action<>(
                             ActionType.INSERT_EXISTING,
-                            new TableAndMore(table.get(), Optional.empty(), Optional.of(currentLocation), Optional.of(fileNames)), session.getUser(), session.getQueryId()));
+                            new TableAndMore(
+                                    table.get(),
+                                    Optional.empty(),
+                                    Optional.of(currentLocation),
+                                    Optional.of(fileNames),
+                                    Optional.ofNullable(oldTableAction).map(Action::getData)
+                            ),
+                            session.getUser(),
+                            session.getQueryId()
+                    )
+            );
             return;
         }
 
@@ -1013,15 +1025,21 @@ public class SemiTransactionalHiveMetastore
             addTableOperations.add(new CreateTableOperation(table, tableAndMore.getPrincipalPrivileges()));
         }
 
-        private void prepareInsertExistingTable(String user, TableAndMore tableAndMore)
+        private void prepareInsertExistingTable(String user, TableAndMore input)
         {
-            Table table = tableAndMore.getTable();
-            Path targetPath = new Path(table.getStorage().getLocation());
-            Path currentPath = tableAndMore.getCurrentLocation().get();
-            cleanUpTasksForAbort.add(new DirectoryCleanUpTask(user, targetPath, false));
-            if (!targetPath.equals(currentPath)) {
-                asyncRename(hdfsEnvironment, renameExecutor, fileRenameCancelled, fileRenameFutures, user, currentPath, targetPath, tableAndMore.getFileNames().get());
-            }
+            Optional<TableAndMore> current = Optional.of(input);
+            TableAndMore tableAndMore;
+            do {
+                tableAndMore = current.get();
+                Table table = tableAndMore.getTable();
+                Path targetPath = new Path(table.getStorage().getLocation());
+                Path currentPath = tableAndMore.getCurrentLocation().get();
+                cleanUpTasksForAbort.add(new DirectoryCleanUpTask(user, targetPath, false));
+                if (!targetPath.equals(currentPath)) {
+                    asyncRename(hdfsEnvironment, renameExecutor, fileRenameCancelled, fileRenameFutures, user, currentPath, targetPath, tableAndMore.getFileNames().get());
+                }
+                current = tableAndMore.getPreviousTableAndMore();
+            } while (current.isPresent());
         }
 
         private void prepareDropPartition(SchemaTableName schemaTableName, List<String> partitionValues)
@@ -1810,13 +1828,20 @@ public class SemiTransactionalHiveMetastore
         private final Optional<PrincipalPrivileges> principalPrivileges;
         private final Optional<Path> currentLocation; // unpartitioned table only
         private final Optional<List<String>> fileNames;
+        private final Optional<TableAndMore> previousTableAndMore;
 
         public TableAndMore(Table table, Optional<PrincipalPrivileges> principalPrivileges, Optional<Path> currentLocation, Optional<List<String>> fileNames)
+        {
+            this(table, principalPrivileges, currentLocation, fileNames, Optional.empty());
+        }
+
+        public TableAndMore(Table table, Optional<PrincipalPrivileges> principalPrivileges, Optional<Path> currentLocation, Optional<List<String>> fileNames, Optional<TableAndMore> prev)
         {
             this.table = requireNonNull(table, "table is null");
             this.principalPrivileges = requireNonNull(principalPrivileges, "principalPrivileges is null");
             this.currentLocation = requireNonNull(currentLocation, "currentLocation is null");
             this.fileNames = requireNonNull(fileNames, "fileNames is null");
+            this.previousTableAndMore = requireNonNull(prev, "Previous table and more");
 
             checkArgument(!table.getStorage().getLocation().isEmpty() || !currentLocation.isPresent(), "currentLocation can not be supplied for table without location");
             checkArgument(!fileNames.isPresent() || currentLocation.isPresent(), "fileNames can be supplied only when currentLocation is supplied");
@@ -1825,6 +1850,11 @@ public class SemiTransactionalHiveMetastore
         public Table getTable()
         {
             return table;
+        }
+
+        public Optional<TableAndMore> getPreviousTableAndMore()
+        {
+            return previousTableAndMore;
         }
 
         public PrincipalPrivileges getPrincipalPrivileges()
