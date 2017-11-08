@@ -6,15 +6,21 @@
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 ### END INIT INFO
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+PATH=/usr/lib/jvm/jdk-8-oracle-x64/bin:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=/usr/share/presto/bin/launcher
 NAME=presto-server
 DESC="Presto Server"
 PIDFILE="/var/run/launcher.pid"
+JAVA_HOME="/usr/lib/jvm/jdk-8-oracle-x64"
 
 test -x $DAEMON || exit 0
 
 set -e
+
+# Moving ticket cache to a non-existent resource so that Presto doesn't pick up any principal from
+# environment which breaks Presto queries
+export KRB5CCNAME=$(mktemp /tmp/presto_krb5cc_XXXXXX)
+rm -f "$KRB5CCNAME"
 
 case "$1" in
   start)
