@@ -332,7 +332,9 @@ public class RangerSystemAccessControl
     @Override
     public void checkCanCreateViewWithSelectFromView(Identity identity, CatalogSchemaTableName view)
     {
-        checkCanCreateViewWithSelectFromView(identity, view);
+        if (!authorizer.canSelectOnResource(createResource(view), identity)) {
+            denyCreateViewWithSelect(view.getSchemaTableName().getTableName());
+        }
     }
 
     private static RangerPrestoResource createResource(CatalogSchemaName catalogSchema)
