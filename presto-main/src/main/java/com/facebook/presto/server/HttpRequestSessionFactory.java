@@ -95,7 +95,7 @@ final class HttpRequestSessionFactory
         schema = trimEmptyToNull(servletRequest.getHeader(PRESTO_SCHEMA));
         assertRequest((catalog != null) || (schema == null), "Schema is set but catalog is not");
 
-        String user = trimEmptyToNull(servletRequest.getHeader(PRESTO_USER));
+        String user = trimEmptyToNull(servletRequest.getHeader(PRESTO_USER)).toLowerCase();
         assertRequest(user != null, "User must be set");
         identity = new Identity(user, Optional.ofNullable(servletRequest.getUserPrincipal()), parseRoleHeaders(servletRequest));
 
