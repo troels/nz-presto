@@ -15,6 +15,8 @@ package com.facebook.presto.server.security;
 
 import com.facebook.presto.security.LoginTokenStore;
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.net.HttpHeaders;
 import com.sun.security.auth.module.Krb5LoginModule;
 import io.airlift.log.Logger;
@@ -49,6 +51,7 @@ import java.security.Principal;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +62,7 @@ import static com.facebook.presto.client.PrestoHeaders.PRESTO_USER;
 import static com.google.common.io.ByteStreams.copy;
 import static com.google.common.io.ByteStreams.nullOutputStream;
 import static java.lang.String.format;
+import static java.util.Collections.enumeration;
 import static javax.security.auth.login.AppConfigurationEntry.LoginModuleControlFlag.REQUIRED;
 import static javax.servlet.http.HttpServletResponse.SC_UNAUTHORIZED;
 import static org.ietf.jgss.GSSCredential.ACCEPT_ONLY;
@@ -164,7 +168,8 @@ public class SpnegoFilter
             Optional<String> maybeUser = loginTokenStore.getUser(loginToken);
             Optional<Principal> maybePrincipal = loginTokenStore.getPrincipal(loginToken);
             String prestoUser = request.getHeader(PRESTO_USER);
-            if (maybeUser.isPresent() && maybePrincipal.isPresent() && maybeUser.get().equalsIgnoreCase(prestoUser)) {
+            if (maybePrincipal.isPresent() && maybeUser.isPresent() && (
+                    prestoUser == null || maybeUser.get().equalsIgnoreCase(prestoUser))) {
                 String user = maybeUser.get();
                 Principal principal = maybePrincipal.get();
 
@@ -174,6 +179,36 @@ public class SpnegoFilter
                     public Principal getUserPrincipal()
                     {
                         return principal;
+                    }
+
+                    @Override
+                    public String getHeader(String key)
+                    {
+                        if (PRESTO_USER.equalsIgnoreCase(key)) {
+                            return user;
+                        }
+                        return super.getHeader(key);
+                    }
+
+                    @Override
+                    public Enumeration<String> getHeaders(String key)
+                    {
+                        if (PRESTO_USER.equalsIgnoreCase(key)) {
+                            return enumeration(ImmutableList.of(user));
+                        }
+                        return super.getHeaders(key);
+                    }
+
+                    @Override
+                    public Enumeration<String> getHeaderNames()
+                    {
+                        Enumeration<String> headerNames = super.getHeaderNames();
+                        ImmutableSet.Builder<String> newHeaderNames = ImmutableSet.builder();
+                        while (headerNames.hasMoreElements()) {
+                            newHeaderNames.add(headerNames.nextElement());
+                        }
+                        newHeaderNames.add(PRESTO_USER);
+                        return enumeration(newHeaderNames.build());
                     }
                 }, servletResponse);
                 return;
