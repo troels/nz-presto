@@ -17,6 +17,9 @@ import com.facebook.presto.plugin.jdbc.BaseJdbcClient;
 import com.facebook.presto.plugin.jdbc.BaseJdbcConfig;
 import com.facebook.presto.plugin.jdbc.JdbcConnectorId;
 import com.facebook.presto.plugin.jdbc.JdbcOutputTableHandle;
+import com.facebook.presto.plugin.jdbc.JdbcTableHandle;
+import com.facebook.presto.plugin.jdbc.JdbcTableLayoutHandle;
+import com.facebook.presto.spi.ConnectorSplitSource;
 import com.facebook.presto.spi.type.BigintType;
 import com.facebook.presto.spi.type.BooleanType;
 import com.facebook.presto.spi.type.DateType;
@@ -32,17 +35,24 @@ import com.facebook.presto.spi.type.TypeSignatureParameter;
 import com.facebook.presto.spi.type.VarbinaryType;
 import com.facebook.presto.spi.type.VarcharType;
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.airlift.log.Logger;
 import org.postgresql.Driver;
 
 import javax.inject.Inject;
 
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Properties;
 
 import static com.facebook.presto.spi.type.CharType.createCharType;
 import static com.facebook.presto.spi.type.VarcharType.createUnboundedVarcharType;
@@ -52,6 +62,8 @@ import static java.util.Collections.singletonList;
 public class PostgreSqlClient
         extends BaseJdbcClient
 {
+    private static final Logger log = Logger.get(PostgreSqlClient.class);
+
     private static final Map<String, Type> PG_ARRAY_TYPE_TO_ELEMENT_TYPE =
             ImmutableMap.<String, Type>builder()
                     .put("_bool", BooleanType.BOOLEAN)
@@ -142,5 +154,91 @@ public class PostgreSqlClient
         }
 
         return super.toPrestoType(dataType, columnSize, typeName);
+    }
+
+    @Override
+    public ConnectorSplitSource getSplits(JdbcTableLayoutHandle layoutHandle)
+    {
+        JdbcTableHandle tableHandle = layoutHandle.getTable();
+        return new PostgreSqlSplitSource(
+                connectorId,
+                tableHandle,
+                connectionUrl,
+                connectionProperties,
+                layoutHandle.getTupleDomain(),
+                this
+        );
+    }
+
+    public Optional<PostgreSqlStatistics> getStatistics(final JdbcTableHandle table, final String connectionUrl, Properties connectionProperties)
+    {
+        try (final Connection conn = driver.connect(connectionUrl, connectionProperties);
+             final Statement statement = conn.createStatement()) {
+            final long numberOfRows;
+            statement.execute("select count(*) from " + quoted(table.getCatalogName(), table.getSchemaName(), table.getTableName()));
+            try (ResultSet resultSet = statement.getResultSet()) {
+                resultSet.next();
+                numberOfRows = resultSet.getLong(1);
+            }
+
+            final DatabaseMetaData metaData = conn.getMetaData();
+            final ImmutableList.Builder<String> primaryKeyColumnsBuilder = ImmutableList.builder();
+            try (ResultSet primaryKeys = metaData.getPrimaryKeys(conn.getCatalog(), table.getSchemaName(), table.getTableName())) {
+                while (primaryKeys.next()) {
+                    final String columnName = primaryKeys.getString("COLUMN_NAME");
+                    if (columnName != null) {
+                        primaryKeyColumnsBuilder.add(columnName);
+                    }
+                }
+            }
+            final List<String> primaryKeyColumns = primaryKeyColumnsBuilder.build();
+            if (primaryKeyColumns.size() != 1) {
+                return Optional.empty();
+            }
+            final String primaryKeyColumn = primaryKeyColumns.get(0);
+
+            final Type primaryKeyColumnType;
+            final String typeName;
+            try (ResultSet columns = metaData.getColumns(conn.getCatalog(), table.getSchemaName(), table.getTableName(), primaryKeyColumn)) {
+                columns.next();
+                int dataType = columns.getInt("DATA_TYPE");
+                typeName = columns.getString("TYPE_NAME");
+                int columnSize = columns.getInt("COLUMN_SIZE");
+                primaryKeyColumnType = toPrestoType(dataType, columnSize, typeName);
+            }
+
+            List<Object> histogram;
+            log.error("Schema name: " + table.getSchemaName());
+            log.error("Table name: " + table.getTableName());
+            log.error("attname : " + primaryKeyColumn);
+
+            try (PreparedStatement preparedStatement = conn.prepareStatement(
+                    String.format("select cast(cast(histogram_bounds as text) as %s[]) from pg_catalog.pg_stats " +
+                                  "where schemaname = ? and tablename = ? and attname = ?", typeName))) {
+                preparedStatement.setString(1, table.getSchemaName());
+                preparedStatement.setString(2, table.getTableName());
+                preparedStatement.setString(3, primaryKeyColumn);
+
+                try (ResultSet histogramCount = preparedStatement.executeQuery()) {
+                    if (!histogramCount.next()) {
+                        log.error("Couldn't get histogram");
+                        return Optional.empty();
+                    }
+
+                    Array array = histogramCount.getArray(1);
+                    if (array == null) {
+                        return Optional.empty();
+                    }
+                    Object[] objectArray = (Object[]) array.getArray();
+                    histogram = ImmutableList.copyOf(objectArray);
+                }
+            }
+
+            return Optional.of(new PostgreSqlStatistics(numberOfRows, primaryKeyColumn, primaryKeyColumnType, histogram));
+        }
+        catch (SQLException e) {
+            log.error(e, "Failed to get statistics for: " + table);
+            return Optional.empty();
+        }
     }
 }
