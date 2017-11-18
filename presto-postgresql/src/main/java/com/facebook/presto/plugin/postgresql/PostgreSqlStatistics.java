@@ -62,12 +62,10 @@ public class PostgreSqlStatistics
         ImmutableList.Builder<Range> ranges = ImmutableList.builder();
 
         ranges.add(Range.lessThan(primaryKeyType, histogram.get(0)));
-        for (int i = 1; i < histogram.size() - 1; i++) {
+        for (int i = 1; i < histogram.size(); i++) {
             ranges.add(Range.range(primaryKeyType, histogram.get(i - 1), true, histogram.get(i), false));
         }
-        if (histogram.size() > 1) {
-            ranges.add(Range.greaterThanOrEqual(primaryKeyType, histogram.get(histogram.size() - 1)));
-        }
+        ranges.add(Range.greaterThanOrEqual(primaryKeyType, histogram.get(histogram.size() - 1)));
         return ranges.build();
     }
 }

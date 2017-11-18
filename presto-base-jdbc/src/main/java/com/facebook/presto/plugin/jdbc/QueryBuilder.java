@@ -33,6 +33,9 @@ import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.spi.type.VarcharType;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
 import org.joda.time.DateTimeZone;
 
@@ -44,6 +47,7 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static com.facebook.presto.spi.type.DateTimeEncoding.unpackMillisUtc;
 import static com.google.common.base.Preconditions.checkArgument;
@@ -59,6 +63,8 @@ import static org.joda.time.DateTimeZone.UTC;
 
 public class QueryBuilder
 {
+    private static final Logger log = Logger.get(QueryBuilder.class);
+
     private final String quote;
 
     private static class TypeAndValue
@@ -194,10 +200,18 @@ public class QueryBuilder
     private List<String> toConjuncts(List<JdbcColumnHandle> columns, TupleDomain<ColumnHandle> tupleDomain, List<TypeAndValue> accumulator)
     {
         ImmutableList.Builder<String> builder = ImmutableList.builder();
-        for (JdbcColumnHandle column : columns) {
+
+        ImmutableSet.Builder<JdbcColumnHandle> columnHandles = ImmutableSet.builder();
+        Map<ColumnHandle, Domain> domains = tupleDomain.getDomains().orElse(ImmutableMap.of());
+        for (ColumnHandle handle : domains.keySet()) {
+            columnHandles.add((JdbcColumnHandle) handle);
+        }
+        columnHandles.addAll(columns);
+
+        for (JdbcColumnHandle column : columnHandles.build()) {
             Type type = column.getColumnType();
             if (isAcceptedType(type)) {
-                Domain domain = tupleDomain.getDomains().get().get(column);
+                Domain domain = domains.get(column);
                 if (domain != null) {
                     builder.add(toPredicate(column.getColumnName(), domain, type, accumulator));
                 }

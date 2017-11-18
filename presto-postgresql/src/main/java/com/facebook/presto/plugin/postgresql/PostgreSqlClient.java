@@ -20,13 +20,14 @@ import com.facebook.presto.plugin.jdbc.JdbcOutputTableHandle;
 import com.facebook.presto.plugin.jdbc.JdbcTableHandle;
 import com.facebook.presto.plugin.jdbc.JdbcTableLayoutHandle;
 import com.facebook.presto.spi.ConnectorSplitSource;
+import com.facebook.presto.spi.PrestoException;
+import com.facebook.presto.spi.block.Block;
 import com.facebook.presto.spi.type.BigintType;
 import com.facebook.presto.spi.type.BooleanType;
 import com.facebook.presto.spi.type.DateType;
 import com.facebook.presto.spi.type.DoubleType;
 import com.facebook.presto.spi.type.IntegerType;
 import com.facebook.presto.spi.type.SmallintType;
-import com.facebook.presto.spi.type.StandardTypes;
 import com.facebook.presto.spi.type.TimeType;
 import com.facebook.presto.spi.type.TimestampType;
 import com.facebook.presto.spi.type.Type;
@@ -38,23 +39,24 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.airlift.log.Logger;
+import io.airlift.slice.Slice;
 import org.postgresql.Driver;
 
 import javax.inject.Inject;
 
-import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 
+import static com.facebook.presto.spi.StandardErrorCode.GENERIC_INTERNAL_ERROR;
 import static com.facebook.presto.spi.type.CharType.createCharType;
+import static com.facebook.presto.spi.type.StandardTypes.ARRAY;
 import static com.facebook.presto.spi.type.VarcharType.createUnboundedVarcharType;
 import static com.facebook.presto.spi.type.VarcharType.createVarcharType;
 import static java.util.Collections.singletonList;
@@ -112,7 +114,7 @@ public class PostgreSqlClient
     {
         connection.setAutoCommit(false);
         PreparedStatement statement = connection.prepareStatement(sql);
-        statement.setFetchSize(1000);
+        statement.setFetchSize(4096);
         return statement;
     }
 
@@ -149,7 +151,7 @@ public class PostgreSqlClient
 
         if (elementType != null) {
             return typeManager.getParameterizedType(
-                    StandardTypes.ARRAY,
+                    ARRAY,
                     singletonList(TypeSignatureParameter.of(elementType.getTypeSignature())));
         }
 
@@ -170,15 +172,22 @@ public class PostgreSqlClient
         );
     }
 
-    public Optional<PostgreSqlStatistics> getStatistics(final JdbcTableHandle table, final String connectionUrl, Properties connectionProperties)
+    public Optional<PostgreSqlStatistics> getStatistics(final JdbcTableHandle table,
+                                                        final String connectionUrl,
+                                                        Properties connectionProperties)
     {
-        try (final Connection conn = driver.connect(connectionUrl, connectionProperties);
-             final Statement statement = conn.createStatement()) {
+        try (final Connection conn = driver.connect(connectionUrl, connectionProperties)) {
             final long numberOfRows;
-            statement.execute("select count(*) from " + quoted(table.getCatalogName(), table.getSchemaName(), table.getTableName()));
-            try (ResultSet resultSet = statement.getResultSet()) {
-                resultSet.next();
-                numberOfRows = resultSet.getLong(1);
+            try (PreparedStatement preparedStatement = conn.prepareStatement(
+                    "select n_live_tup from pg_stat_user_tables where schemaname = ? and relname = ?")) {
+                preparedStatement.setString(1, table.getSchemaName());
+                preparedStatement.setString(2, table.getTableName());
+                preparedStatement.execute();
+
+                try (ResultSet resultSet = preparedStatement.getResultSet()) {
+                    resultSet.next();
+                    numberOfRows = resultSet.getLong(1);
+                }
             }
 
             final DatabaseMetaData metaData = conn.getMetaData();
@@ -193,6 +202,7 @@ public class PostgreSqlClient
             }
             final List<String> primaryKeyColumns = primaryKeyColumnsBuilder.build();
             if (primaryKeyColumns.size() != 1) {
+                log.error("Primary key column was: " + primaryKeyColumns);
                 return Optional.empty();
             }
             final String primaryKeyColumn = primaryKeyColumns.get(0);
@@ -208,13 +218,10 @@ public class PostgreSqlClient
             }
 
             List<Object> histogram;
-            log.error("Schema name: " + table.getSchemaName());
-            log.error("Table name: " + table.getTableName());
-            log.error("attname : " + primaryKeyColumn);
-
+            String sqlType = toSqlType(primaryKeyColumnType);
             try (PreparedStatement preparedStatement = conn.prepareStatement(
                     String.format("select cast(cast(histogram_bounds as text) as %s[]) from pg_catalog.pg_stats " +
-                                  "where schemaname = ? and tablename = ? and attname = ?", typeName))) {
+                                  "where schemaname = ? and tablename = ? and attname = ?", sqlType))) {
                 preparedStatement.setString(1, table.getSchemaName());
                 preparedStatement.setString(2, table.getTableName());
                 preparedStatement.setString(3, primaryKeyColumn);
@@ -225,18 +232,47 @@ public class PostgreSqlClient
                         return Optional.empty();
                     }
 
-                    Array array = histogramCount.getArray(1);
+                    Type arrayType = typeManager.getParameterizedType(ARRAY,
+                            ImmutableList.of(TypeSignatureParameter.of(primaryKeyColumnType.getTypeSignature())));
+                    Block array = (Block) getJdbcResultSetReader().getObject(histogramCount, 1, arrayType);
+
                     if (array == null) {
                         return Optional.empty();
                     }
-                    Object[] objectArray = (Object[]) array.getArray();
-                    histogram = ImmutableList.copyOf(objectArray);
+
+                    ImmutableList.Builder<Object> histogramBuilder = ImmutableList.builder();
+                    for (int i = 0; i < array.getPositionCount(); i++) {
+                        Class<?> javaType = primaryKeyColumnType.getJavaType();
+                        if (array.isNull(i)) {
+                            continue;
+                        }
+                        if (javaType == double.class) {
+                            histogramBuilder.add(primaryKeyColumnType.getDouble(array, i));
+                        }
+                        else if (javaType == boolean.class) {
+                            histogramBuilder.add(primaryKeyColumnType.getBoolean(array, i));
+                        }
+                        else if (javaType == long.class) {
+                            histogramBuilder.add(primaryKeyColumnType.getLong(array, i));
+                        }
+                        else if (javaType == Block.class) {
+                            histogramBuilder.add(primaryKeyColumnType.getObject(array, i));
+                        }
+                        else if (javaType == Slice.class) {
+                            histogramBuilder.add(primaryKeyColumnType.getSlice(array, i));
+                        }
+                        else {
+                            throw new PrestoException(GENERIC_INTERNAL_ERROR, "Unknown type: " + javaType + " from: " + primaryKeyColumnType);
+                        }
+                    }
+
+                    histogram = histogramBuilder.build();
                 }
             }
 
             return Optional.of(new PostgreSqlStatistics(numberOfRows, primaryKeyColumn, primaryKeyColumnType, histogram));
         }
-        catch (SQLException e) {
+        catch (Exception e) {
             log.error(e, "Failed to get statistics for: " + table);
             return Optional.empty();
         }

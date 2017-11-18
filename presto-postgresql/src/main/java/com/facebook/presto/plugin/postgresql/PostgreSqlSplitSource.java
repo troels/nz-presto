@@ -23,8 +23,10 @@ import com.facebook.presto.spi.predicate.Domain;
 import com.facebook.presto.spi.predicate.Range;
 import com.facebook.presto.spi.predicate.TupleDomain;
 import com.facebook.presto.spi.predicate.ValueSet;
+import com.facebook.presto.spi.type.Type;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.airlift.log.Logger;
 
 import java.util.List;
 import java.util.Map;
@@ -38,6 +40,10 @@ import static com.google.common.collect.Maps.fromProperties;
 public class PostgreSqlSplitSource
         implements ConnectorSplitSource
 {
+    private static final Logger log = Logger.get(PostgreSqlSplitSource.class);
+
+    private static final int MAX_ROWS_GOAL_PER_SPLIT = 100_000;
+
     private final String connectorId;
     private final JdbcTableHandle tableHandle;
     private final String connectionUrl;
@@ -45,9 +51,10 @@ public class PostgreSqlSplitSource
     private final TupleDomain<ColumnHandle> tupleDomain;
     private final PostgreSqlClient client;
     private Optional<PostgreSqlStatistics> statistics = Optional.empty();
-    boolean closed = false;
+    private boolean closed = false;
 
-    public PostgreSqlSplitSource(String connectorId, JdbcTableHandle tableHandle, String connectionUrl,
+    public PostgreSqlSplitSource(String connectorId,
+                                 JdbcTableHandle tableHandle, String connectionUrl,
                                  Properties properties, TupleDomain<ColumnHandle> tupleDomain,
                                  PostgreSqlClient client)
     {
@@ -66,7 +73,23 @@ public class PostgreSqlSplitSource
         getStatistics();
         final Map<String, String> mapProperties = fromProperties(properties);
 
-        if (!statistics.isPresent()) {
+        Map<ColumnHandle, Domain> domains = tupleDomain.getDomains().orElse(ImmutableMap.of());
+
+        ColumnHandle primaryKey = null;
+        PostgreSqlStatistics rawStatistics = null;
+
+        if (statistics.isPresent()) {
+            rawStatistics = statistics.get();
+
+            primaryKey = new JdbcColumnHandle(
+                    connectorId,
+                    rawStatistics.getPrimaryKeyColumn(),
+                    rawStatistics.getPrimaryKeyType());
+        }
+
+        if (!statistics.isPresent() || domains.containsKey(primaryKey)) {
+            log.info("Failed to get statistics. Splitting into one piece.");
+
             closed = true;
             return CompletableFuture.completedFuture(
                     ImmutableList.of(
@@ -80,19 +103,48 @@ public class PostgreSqlSplitSource
                                     tupleDomain)));
         }
 
-        final PostgreSqlStatistics rawStatistics = statistics.get();
-        final ImmutableList.Builder<ConnectorSplit> splits = ImmutableList.builder();
-        final ColumnHandle primaryKey = new JdbcColumnHandle(
-                connectorId,
-                rawStatistics.getPrimaryKeyColumn(),
-                rawStatistics.getPrimaryKeyType());
+        List<Range> histogramRanges = rawStatistics.getHistogramRanges();
+        long numberOfRows = rawStatistics.getNumberOfRows();
+        long rowsPerRange = numberOfRows / histogramRanges.size();
+        long rangesPerSplit = MAX_ROWS_GOAL_PER_SPLIT / rowsPerRange;
 
-        for (Range range : rawStatistics.getHistogramRanges()) {
+        if (rangesPerSplit == 0) {
+            rangesPerSplit = 1;
+        }
+
+        ImmutableList.Builder<Range> ranges = ImmutableList.builder();
+        Range currentRange = null;
+        int currentRanges = 0;
+        for (Range histogramRange : histogramRanges) {
+            if (currentRange == null) {
+                currentRange = histogramRange;
+            }
+            else {
+                currentRange = currentRange.span(histogramRange);
+            }
+
+            currentRanges++;
+            if (currentRanges == rangesPerSplit) {
+                currentRanges = 0;
+                ranges.add(currentRange);
+                currentRange = null;
+            }
+        }
+
+        if (currentRange != null) {
+            ranges.add(currentRange);
+        }
+
+        Type primaryKeyType = rawStatistics.getPrimaryKeyType();
+        final ImmutableList.Builder<ConnectorSplit> splits = ImmutableList.builder();
+
+        for (Range range : ranges.build()) {
             TupleDomain<ColumnHandle> intersect = tupleDomain.intersect(
                     TupleDomain.withColumnDomains(
                             ImmutableMap.of(
                                     primaryKey,
-                                    Domain.create(ValueSet.of(rawStatistics.getPrimaryKeyType(), range),
+                                    Domain.create(
+                                            ValueSet.copyOfRanges(primaryKeyType, ImmutableList.of(range)),
                                             false))));
             splits.add(
                     new JdbcSplit(
