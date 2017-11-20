@@ -77,6 +77,9 @@ public class PostgreSqlSplitSource
 
         ColumnHandle primaryKey = null;
         PostgreSqlStatistics rawStatistics = null;
+        List<Range> histogramRanges = null;
+        long numberOfRows = 0;
+        long rowsPerRange = 0;
 
         if (statistics.isPresent()) {
             rawStatistics = statistics.get();
@@ -85,11 +88,14 @@ public class PostgreSqlSplitSource
                     connectorId,
                     rawStatistics.getPrimaryKeyColumn(),
                     rawStatistics.getPrimaryKeyType());
+            histogramRanges = rawStatistics.getHistogramRanges();
+            numberOfRows = rawStatistics.getNumberOfRows();
+            if (histogramRanges.size() != 0) {
+                rowsPerRange = numberOfRows / histogramRanges.size();
+            }
         }
 
-        if (!statistics.isPresent() || domains.containsKey(primaryKey)) {
-            log.info("Failed to get statistics. Splitting into one piece.");
-
+        if (!statistics.isPresent() || domains.containsKey(primaryKey) || numberOfRows == 0 || rowsPerRange == 0) {
             closed = true;
             return CompletableFuture.completedFuture(
                     ImmutableList.of(
@@ -103,9 +109,6 @@ public class PostgreSqlSplitSource
                                     tupleDomain)));
         }
 
-        List<Range> histogramRanges = rawStatistics.getHistogramRanges();
-        long numberOfRows = rawStatistics.getNumberOfRows();
-        long rowsPerRange = numberOfRows / histogramRanges.size();
         long rangesPerSplit = MAX_ROWS_GOAL_PER_SPLIT / rowsPerRange;
 
         if (rangesPerSplit == 0) {
