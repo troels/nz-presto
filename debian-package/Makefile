@@ -55,3 +55,7 @@ package: clean build
 	mkdir -p ../releases; \
 	mv *.deb ../releases/; \
 	popd;
+
+docker: package
+	docker build . --tag sal:5000/daa/presto-origin:latest
+	docker push sal:5000/daa/presto-origin:latest
