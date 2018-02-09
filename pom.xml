@@ -114,6 +114,7 @@
         <module>presto-plugin-toolkit</module>
         <module>presto-resource-group-managers</module>
         <module>presto-benchto-benchmarks</module>
+        <module>presto-query-event-listener</module>
     </modules>
 
     <dependencyManagement>

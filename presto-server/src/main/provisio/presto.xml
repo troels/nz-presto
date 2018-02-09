@@ -157,4 +157,10 @@
 	  path="${basedir}/../presto-ranger-plugin/target/presto-ranger-plugin-${project.version}.jar"
 	  />
     </fileSet>
+    
+    <fileSet to="plugin/query-event-listener">
+      <file
+	  path="${basedir}/../presto-query-event-listener/target/presto-query-event-listener-${project.version}.jar"
+	  />
+    </fileSet>
 </runtime>
