@@ -1,9 +1,12 @@
 # Presto Server
 SHELL := /bin/bash
-version = 0.179-t.0.1-nz.1
+version = 0.179-t.0.1-nz.2
 name = presto-server
+url = http://gitlab.nzcorp.net/daa/nz-presto
 full_name = $(name)-$(version)
 full_path = $(shell pwd)/../presto-server/target/$(full_name).tar.gz
+
+.PHONY: changelog
 
 all: package
 
@@ -49,9 +52,12 @@ build: prep-build
 	cp -rp scripts/$(name) build/etc/init.d/; \
 	cp -rp configs/* build/etc/presto/;
 
-package: clean build
+changelog:
+	grep -q "$(name) ($(version))" changelog || /usr/bin/dch -v "$(version)" "Prepare for release" -D unstable -c changelog
+
+package: clean changelog build
 	pushd build; \
-	fpm -a all -s dir -t deb -d "uuid-runtime" -n $(name) -v $(version) --after-install ../scripts/postinst -- .; \
+		fpm -a all -s dir -t deb -d "uuid-runtime" -n $(name) -v $(version) --deb-changelog ../changelog --url $(url) --after-install ../scripts/postinst -- .; \
 	mkdir -p ../releases; \
 	mv *.deb ../releases/; \
 	popd;

@@ -1,0 +1,11 @@
+presto-server (0.179-t.0.1-nz.2) unstable; urgency=medium
+
+  * Prepare for release
+
+ -- Mikael Barfred <miba@novozymes.com>  Fri, 23 Feb 2018 09:51:32 +0100
+
+presto-server (0.179-t.0.1-nz.1) unstable; urgency=medium
+
+  * Package created with FPM.
+
+ -- Troels Nielsen <tns@novozymes.com>  Mon, 20 Nov 2017 19:44:13 +0100
