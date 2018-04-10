@@ -1,6 +1,9 @@
 # Presto Server
+
+# IMPORTANT: Update the following line when you want to build a new version:
+version = 0.179-t.0.1-nz.3
+
 SHELL := /bin/bash
-version = 0.179-t.0.1-nz.2
 name = presto-server
 url = http://gitlab.nzcorp.net/daa/nz-presto
 full_name = $(name)-$(version)

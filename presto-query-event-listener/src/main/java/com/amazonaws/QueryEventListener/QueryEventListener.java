@@ -42,7 +42,7 @@ public class QueryEventListener
 
     public QueryEventListener(Map<String, String> config)
     {
-        createLogFile();
+        createLogFile(config);
     }
 
     public void queryCreated(QueryCreatedEvent queryCreatedEvent)
@@ -214,19 +214,32 @@ public class QueryEventListener
         }
     }
 
-    public void createLogFile()
+    public void createLogFile(Map<String, String> config)
     {
         SimpleDateFormat dateTime = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
-        String timeStamp = dateTime.format(new Date());
         StringBuilder logPath = new StringBuilder();
 
-        logPath.append("/var/log/presto/queries-");
-        logPath.append(timeStamp);
-        logPath.append(".%g.log");
+        String logFile = config.getOrDefault("log-file", "/var/log/presto/queries-%g.log");
+        int maxSize;
+        try {
+            String maxSizeString = config.getOrDefault("max-size", "524288000");
+            maxSize = Integer.parseInt(maxSizeString);
+        }
+        catch (NumberFormatException e) {
+            maxSize = 524288000;
+        }
 
+        int maxCounts;
+        try {
+            String maxCountsString = config.getOrDefault("max-counts", "10");
+            maxCounts = Integer.parseInt(maxCountsString);
+        }
+        catch (NumberFormatException e) {
+            maxCounts = 10;
+        }
         try {
             logger = Logger.getLogger(loggerName);
-            fh = new FileHandler(logPath.toString(), 524288000, 5, true);
+            fh = new FileHandler(logFile, maxSize, maxCounts, true);
             logger.addHandler(fh);
             logger.setUseParentHandlers(false);
             SimpleFormatter formatter = new SimpleFormatter();
