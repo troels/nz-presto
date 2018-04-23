@@ -21,7 +21,7 @@ import com.facebook.presto.spi.eventlistener.SplitCompletedEvent;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.logging.FileHandler;
@@ -37,7 +37,7 @@ public class QueryEventListener
 
     public QueryEventListener()
     {
-        createLogFile();
+        createLogFile(new HashMap<String, String>());
     }
 
     public QueryEventListener(Map<String, String> config)

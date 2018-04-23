@@ -158,9 +158,9 @@
 	  />
     </fileSet>
     
-    <fileSet to="plugin/query-event-listener">
-      <file
-	  path="${basedir}/../presto-query-event-listener/target/presto-query-event-listener-${project.version}.jar"
-	  />
-    </fileSet>
+    <artifactSet to="plugin/query-event-listener">
+      <artifact id="${project.groupId}:presto-query-event-listener:zip:${project.version}">
+	<unpack />
+      </artifact>
+    </artifactSet>
 </runtime>
