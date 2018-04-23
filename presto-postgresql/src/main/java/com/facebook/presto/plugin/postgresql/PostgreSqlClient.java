@@ -145,6 +145,9 @@ public class PostgreSqlClient
         else if ("_varchar".equals(typeName)) {
             elementType = createUnboundedVarcharType();
         }
+        else if ("jsonb".equals(typeName) || "json".equals(typeName)) {
+            return createUnboundedVarcharType();
+        }
         else {
             elementType = PG_ARRAY_TYPE_TO_ELEMENT_TYPE.get(typeName);
         }
