@@ -35,6 +35,8 @@ import javax.annotation.concurrent.ThreadSafe;
 import javax.inject.Inject;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -201,7 +203,24 @@ public class CachingHiveMetastore
                     public Map<HiveTableName, Optional<Table>> loadAll(Iterable<? extends HiveTableName> keys)
                             throws Exception
                     {
-                        return loadTables(keys);
+                        List<HiveTableName> lst = new ArrayList<>();
+                        Map<HiveTableName, Optional<Table>> output = new HashMap<>();
+                        Iterator<? extends HiveTableName> iterKeys = keys.iterator();
+                        // Chunk the load-all request to avoid timeout.
+                        while (true) {
+                            while (iterKeys.hasNext()) {
+                                lst.add(iterKeys.next());
+                                if (lst.size() > 500) {
+                                    break;
+                                }
+                            }
+                            if (lst.size() == 0) {
+                                break;
+                            }
+                            output.putAll(loadTables(lst));
+                            lst.clear();
+                        }
+                        return output;
                     }
                 }, executor));
 
