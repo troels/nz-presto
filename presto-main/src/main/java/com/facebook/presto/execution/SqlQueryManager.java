@@ -32,16 +32,24 @@ import com.facebook.presto.sql.parser.ParsingException;
 import com.facebook.presto.sql.parser.ParsingOptions;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.Plan;
+import com.facebook.presto.sql.tree.ComparisonExpression;
 import com.facebook.presto.sql.tree.Execute;
 import com.facebook.presto.sql.tree.Explain;
 import com.facebook.presto.sql.tree.Expression;
 import com.facebook.presto.sql.tree.ExpressionRewriter;
 import com.facebook.presto.sql.tree.ExpressionTreeRewriter;
+import com.facebook.presto.sql.tree.Identifier;
 import com.facebook.presto.sql.tree.Insert;
+import com.facebook.presto.sql.tree.LikePredicate;
+import com.facebook.presto.sql.tree.NodeLocation;
 import com.facebook.presto.sql.tree.Parameter;
 import com.facebook.presto.sql.tree.Query;
 import com.facebook.presto.sql.tree.QueryBody;
+import com.facebook.presto.sql.tree.QuerySpecification;
+import com.facebook.presto.sql.tree.Relation;
 import com.facebook.presto.sql.tree.Statement;
+import com.facebook.presto.sql.tree.StringLiteral;
+import com.facebook.presto.sql.tree.Table;
 import com.facebook.presto.sql.tree.Values;
 import com.facebook.presto.transaction.TransactionManager;
 import com.google.common.collect.ImmutableList;
@@ -84,6 +92,7 @@ import static com.facebook.presto.spi.StandardErrorCode.QUERY_TEXT_TOO_LARGE;
 import static com.facebook.presto.spi.StandardErrorCode.SERVER_SHUTTING_DOWN;
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.INVALID_PARAMETER_USAGE;
 import static com.facebook.presto.sql.planner.ExpressionInterpreter.verifyExpressionIsConstant;
+import static com.facebook.presto.sql.tree.ComparisonExpressionType.EQUAL;
 import static com.facebook.presto.sql.tree.ExpressionTreeRewriter.rewriteWith;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -364,6 +373,7 @@ public class SqlQueryManager
             statement = unwrapExecuteStatement(wrappedStatement, sqlParser, session);
             List<Expression> parameters = wrappedStatement instanceof Execute ? ((Execute) wrappedStatement).getParameters() : emptyList();
             statement = rewritePreparedInsert(statement, parameters);
+            statement = rewriteCatalogQuery(statement, parameters);
             validateParameters(statement, parameters);
 
             QueryExecutionFactory<?> queryExecutionFactory = executionFactories.get(statement.getClass());
@@ -436,6 +446,128 @@ public class SqlQueryManager
         queueManager.submit(statement, queryExecution, queryExecutor);
 
         return queryInfo;
+    }
+
+    // SAS/JMP creates very suspicious queries for reading the catalog.
+    // Usually something like:
+    //   select * from information_table.tables where table_schema like 'schema_name' and table_name like 'table_name'
+    // Presto cannot optimize these queries, but are forced to fetch everything from metastore,
+    // which is very, very slow.
+    // This function rewrites likes on table_schema and table_name to equals, which is off-spec (_ is not interpreted as a wildcard)
+    // but makes the user-experience bearable in SAS/JMP and Tableau.
+    private Statement rewriteCatalogQuery(Statement statement, List<Expression> parameters)
+    {
+        if (parameters.size() > 0) {
+            return statement;
+        }
+        if (!(statement instanceof Query)) {
+            return statement;
+        }
+
+        Query q = (Query) statement;
+        QueryBody body = q.getQueryBody();
+        if (!(body instanceof QuerySpecification)) {
+            return statement;
+        }
+
+        QuerySpecification spec = (QuerySpecification) body;
+        if (spec.getGroupBy().isPresent() ||
+            spec.getHaving().isPresent() ||
+            spec.getLimit().isPresent() ||
+            spec.getOrderBy().isPresent() ||
+            !spec.getFrom().isPresent() ||
+            !spec.getWhere().isPresent()) {
+            return statement;
+        }
+
+        Relation fromOption = spec.getFrom().get();
+
+        if (!(fromOption instanceof Table)) {
+            return statement;
+        }
+
+        Table table = (Table) fromOption;
+
+        List<String> parts = table.getName().getParts();
+        if (parts.size() == 3) {
+            parts = parts.subList(1, 3);
+        }
+        if (parts.size() != 2) {
+            return statement;
+        }
+
+        if (!"information_schema".equalsIgnoreCase(parts.get(0)) ||
+            !("columns".equalsIgnoreCase(parts.get(1)) || "tables".equalsIgnoreCase(parts.get(1)))) {
+            return statement;
+        }
+
+        Expression where = spec.getWhere().get();
+        Expression expr = rewriteWith(new ExpressionRewriter<Object>()
+                                      {
+                                          @Override
+                                          public Expression rewriteExpression(Expression node, Object context, ExpressionTreeRewriter<Object> treeRewriter)
+                                          {
+                                              return treeRewriter.defaultRewrite(node, context);
+                                          }
+
+                                          @Override
+                                          public Expression rewriteLikePredicate(LikePredicate node, Object context, ExpressionTreeRewriter<Object> treeRewriter)
+                                          {
+                                              Expression pattern = node.getPattern();
+                                              Expression value = node.getValue();
+                                              log.info("Looking at: %s %s", pattern, value);
+
+                                              if (!(pattern instanceof StringLiteral) || !(value instanceof Identifier)) {
+                                                  return super.rewriteLikePredicate(node, context, treeRewriter);
+                                              }
+                                              log.info("Was identifier and pattern, rewriting!");
+                                              StringLiteral p = (StringLiteral) pattern;
+                                              Identifier i = (Identifier) value;
+
+                                              if (!"table_schema".equalsIgnoreCase(i.getName()) &&
+                                                  !"\"table_schema\"".equalsIgnoreCase(i.getName()) &&
+                                                  !"table_name".equalsIgnoreCase(i.getName()) &&
+                                                  !"\"table_name\"".equalsIgnoreCase(i.getName())) {
+                                                  return super.rewriteLikePredicate(node, context, treeRewriter);
+                                              }
+
+                                              if (p.getValue().contains("%")) {
+                                                  return super.rewriteLikePredicate(node, context, treeRewriter);
+                                              }
+
+                                              return new ComparisonExpression(EQUAL, value, pattern);
+                                          }
+                                      },
+                where
+                );
+
+        Optional<NodeLocation> specLocation = spec.getLocation();
+        QuerySpecification querySpec = specLocation.map(nodeLocation ->
+                new QuerySpecification(
+                        nodeLocation,
+                        spec.getSelect(),
+                        spec.getFrom(),
+                        Optional.of(expr),
+                        spec.getGroupBy(),
+                        spec.getHaving(),
+                        spec.getOrderBy(),
+                        spec.getLimit()))
+                .orElseGet(() ->
+                        new QuerySpecification(
+                                spec.getSelect(),
+                                spec.getFrom(),
+                                Optional.of(expr),
+                                spec.getGroupBy(),
+                                spec.getHaving(),
+                                spec.getOrderBy(),
+                                spec.getLimit()));
+        Optional<NodeLocation> location = q.getLocation();
+
+        return location.map(
+                nodeLocation -> new Query(nodeLocation, q.getWith(), querySpec, q.getOrderBy(), q.getLimit())
+        ).orElseGet(
+                () -> new Query(q.getWith(), querySpec, q.getOrderBy(), q.getLimit())
+        );
     }
 
     public static Statement unwrapExecuteStatement(Statement statement, SqlParser sqlParser, Session session)
