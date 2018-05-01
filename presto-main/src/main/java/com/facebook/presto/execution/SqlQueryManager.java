@@ -535,6 +535,11 @@ public class SqlQueryManager
                                                   return super.rewriteLikePredicate(node, context, treeRewriter);
                                               }
 
+                                              // If no underscores or there is escaped underscores. Don't rewrite.
+                                              if (!p.getValue().contains("_") || p.getValue().contains("\\_")) {
+                                                  return super.rewriteLikePredicate(node, context, treeRewriter);
+                                              }
+
                                               return new ComparisonExpression(EQUAL, value, pattern);
                                           }
                                       },
